@@ -1,0 +1,100 @@
+using AwesomeAssertions;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using NuGet.Configuration;
+using NuGet.Protocol;
+using NuGet.Protocol.Core.Types;
+using System.Net;
+using System.Text.Json;
+using Xunit;
+
+namespace Arbor.DevPackages.Server.Tests.ServiceIndex;
+
+public sealed class ServiceIndexTests : IClassFixture<WebApplicationFactory<Program>>
+{
+    private readonly WebApplicationFactory<Program> _factory;
+
+    public ServiceIndexTests(WebApplicationFactory<Program> factory)
+    {
+        _factory = factory;
+    }
+
+    [Fact]
+    public async Task GetServiceIndex_ReturnsOkWithCorrectVersionAndResources()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/v3/index.json");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        root.GetProperty("version").GetString().Should().Be("3.0.0");
+        root.GetProperty("resources").GetArrayLength().Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task GetServiceIndex_ResourceIds_ContainRequestHost()
+    {
+        var client = _factory.CreateClient();
+        var expectedHost = client.BaseAddress!.Host;
+
+        var response = await client.GetAsync("/v3/index.json");
+
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+        var resources = doc.RootElement.GetProperty("resources");
+
+        foreach (var resource in resources.EnumerateArray())
+        {
+            var id = resource.GetProperty("@id").GetString();
+            id.Should().Contain(expectedHost);
+        }
+    }
+
+    [Fact]
+    public async Task GetServiceIndex_ContentType_IsApplicationJson()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/v3/index.json");
+
+        response.Content.Headers.ContentType?.MediaType.Should().Be("application/json");
+    }
+
+    [Fact]
+    public async Task GetServiceIndex_NuGetProtocolClient_CanLoadServiceIndex()
+    {
+        // Use a real Kestrel listener on a random port so NuGet.Protocol can
+        // connect via its own HTTP stack without any handler injection.
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseUrls("http://127.0.0.1:0");
+        Arbor.DevPackages.ServiceDefaults.Extensions.AddServiceDefaults(builder);
+
+        await using var app = builder.Build();
+        Arbor.DevPackages.ServiceDefaults.Extensions.MapDefaultEndpoints(app);
+        Arbor.DevPackages.Server.ServiceIndex.ServiceIndexEndpoints.MapServiceIndex(app);
+
+        await app.StartAsync();
+
+        var indexUrl = app.Urls.FirstOrDefault() is { } url
+            ? $"{url}/v3/index.json"
+            : throw new InvalidOperationException("The test server did not bind to any address.");
+
+        var source = new PackageSource(indexUrl);
+        var repository = Repository.Factory.GetCoreV3(source);
+
+        var serviceIndex = await repository.GetResourceAsync<ServiceIndexResourceV3>(CancellationToken.None);
+
+        serviceIndex.Should().NotBeNull();
+        serviceIndex.GetServiceEntryUri("PackageBaseAddress/3.0.0").Should().NotBeNull();
+        serviceIndex.GetServiceEntryUri("RegistrationsBaseUrl/3.6.0").Should().NotBeNull();
+        serviceIndex.GetServiceEntryUri("SearchQueryService/3.5.0").Should().NotBeNull();
+
+        await app.StopAsync();
+    }
+}
