@@ -9,50 +9,113 @@ public sealed class FileSystemPackageStore : IPackageStore
     public FileSystemPackageStore(string storePath)
     {
         ArgumentNullException.ThrowIfNull(storePath);
-        _storePath = storePath;
+        _storePath = Path.GetFullPath(storePath);
     }
 
-    private static string PackageDir(string storePath, PackageIdentity identity) =>
-        Path.Combine(storePath, identity.Id.ToLowerInvariant(), identity.Version.ToLowerInvariant());
+    // --- Path helpers ---
 
-    private static string NupkgPath(string storePath, PackageIdentity identity)
+    private static void ValidateIdentitySegment(string value, string paramName)
     {
-        string dir = PackageDir(storePath, identity);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new ArgumentException($"Package {paramName} must not be null or whitespace.", paramName);
+        }
+
+        if (value.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
+            value.Contains("..") ||
+            Path.IsPathRooted(value))
+        {
+            throw new ArgumentException($"Package {paramName} '{value}' contains invalid path characters.", paramName);
+        }
+    }
+
+    private static void ValidateIdentity(PackageIdentity identity)
+    {
+        ValidateIdentitySegment(identity.Id, nameof(identity.Id));
+        ValidateIdentitySegment(identity.Version, nameof(identity.Version));
+    }
+
+    private string PackageDir(PackageIdentity identity)
+    {
+        string dir = Path.GetFullPath(
+            Path.Combine(_storePath, identity.Id.ToLowerInvariant(), identity.Version.ToLowerInvariant()));
+
+        if (!dir.StartsWith(_storePath + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+        {
+            throw new ArgumentException("Package identity would escape the store path.");
+        }
+
+        return dir;
+    }
+
+    private string NupkgPath(PackageIdentity identity)
+    {
+        string dir = PackageDir(identity);
         string id = identity.Id.ToLowerInvariant();
         string version = identity.Version.ToLowerInvariant();
         return Path.Combine(dir, $"{id}.{version}.nupkg");
     }
 
-    private static string NuspecPath(string storePath, PackageIdentity identity)
+    private string NuspecPath(PackageIdentity identity)
     {
-        string dir = PackageDir(storePath, identity);
+        string dir = PackageDir(identity);
         string id = identity.Id.ToLowerInvariant();
         string version = identity.Version.ToLowerInvariant();
         return Path.Combine(dir, $"{id}.{version}.nuspec");
     }
 
-    private static string Sha512Path(string storePath, PackageIdentity identity)
+    private string Sha512Path(PackageIdentity identity)
     {
-        string dir = PackageDir(storePath, identity);
+        string dir = PackageDir(identity);
         string id = identity.Id.ToLowerInvariant();
         string version = identity.Version.ToLowerInvariant();
         return Path.Combine(dir, $"{id}.{version}.sha512");
     }
 
-    private static async Task<string> ComputeSha512Async(Stream stream, CancellationToken cancellationToken)
+    // --- Hashing helpers ---
+
+    /// <summary>
+    /// Copies <paramref name="source"/> to <paramref name="destination"/> in a single pass,
+    /// computing the SHA-512 hash along the way. Works with non-seekable streams.
+    /// </summary>
+    private static async Task<string> CopyAndHashAsync(
+        Stream source, Stream destination, CancellationToken cancellationToken)
     {
-        stream.Position = 0;
-        byte[] hashBytes = await SHA512.HashDataAsync(stream, cancellationToken);
-        stream.Position = 0;
-        return Convert.ToHexStringLower(hashBytes);
+        using IncrementalHash hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA512);
+        byte[] buffer = new byte[81920];
+        int read;
+        while ((read = await source.ReadAsync(buffer, cancellationToken)) > 0)
+        {
+            hasher.AppendData(buffer, 0, read);
+            await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+        }
+
+        return Convert.ToHexStringLower(hasher.GetHashAndReset());
     }
 
-    private static async Task<string> ComputeSha512FromFileAsync(string filePath, CancellationToken cancellationToken)
+    private static async Task<string> ComputeSha512FromFileAsync(
+        string filePath, CancellationToken cancellationToken)
     {
         await using FileStream fs = new(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
         byte[] hashBytes = await SHA512.HashDataAsync(fs, cancellationToken);
         return Convert.ToHexStringLower(hashBytes);
     }
+
+    // --- Cleanup helper ---
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch
+        {
+            // Best-effort cleanup — ignore failures.
+        }
+    }
+
+    // --- IPackageStore ---
 
     public async Task<PackageStoreResult> StoreAsync(
         PackageIdentity identity,
@@ -63,49 +126,72 @@ public sealed class FileSystemPackageStore : IPackageStore
         ArgumentNullException.ThrowIfNull(identity);
         ArgumentNullException.ThrowIfNull(nupkg);
         ArgumentNullException.ThrowIfNull(nuspec);
+        ValidateIdentity(identity);
 
-        string nupkgPath = NupkgPath(_storePath, identity);
+        string nupkgPath = NupkgPath(identity);
+        string nuspecPath = NuspecPath(identity);
+        string sha512Path = Sha512Path(identity);
 
-        if (File.Exists(nupkgPath))
-        {
-            return PackageStoreResult.AlreadyExists;
-        }
-
-        string dir = PackageDir(_storePath, identity);
+        string dir = PackageDir(identity);
         Directory.CreateDirectory(dir);
 
-        string sha512 = await ComputeSha512Async(nupkg, cancellationToken);
+        string nupkgTmp = nupkgPath + ".tmp";
+        string nuspecTmp = nuspecPath + ".tmp";
+        string sha512Tmp = sha512Path + ".tmp";
 
-        nupkg.Position = 0;
-        await using (FileStream dest = new(nupkgPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        try
         {
-            await nupkg.CopyToAsync(dest, cancellationToken);
-        }
+            // Single-pass copy+hash — works with non-seekable (e.g., network) streams.
+            string sha512;
+            await using (FileStream dest = new(nupkgTmp, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                sha512 = await CopyAndHashAsync(nupkg, dest, cancellationToken);
+            }
 
-        string nuspecPath = NuspecPath(_storePath, identity);
-        nuspec.Position = 0;
-        await using (FileStream dest = new(nuspecPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            await using (FileStream dest = new(nuspecTmp, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                await nuspec.CopyToAsync(dest, cancellationToken);
+            }
+
+            await File.WriteAllTextAsync(sha512Tmp, sha512, cancellationToken);
+
+            // Atomic promotion: move nupkg temp into place (no overwrite = idempotency guard).
+            try
+            {
+                File.Move(nupkgTmp, nupkgPath, overwrite: false);
+            }
+            catch (IOException) when (File.Exists(nupkgPath))
+            {
+                // Another writer beat us — surface as AlreadyExists.
+                return PackageStoreResult.AlreadyExists;
+            }
+
+            File.Move(nuspecTmp, nuspecPath, overwrite: true);
+            File.Move(sha512Tmp, sha512Path, overwrite: true);
+
+            return PackageStoreResult.Stored;
+        }
+        catch
         {
-            await nuspec.CopyToAsync(dest, cancellationToken);
+            TryDeleteFile(nupkgTmp);
+            TryDeleteFile(nuspecTmp);
+            TryDeleteFile(sha512Tmp);
+            throw;
         }
-
-        string sha512Path = Sha512Path(_storePath, identity);
-        await File.WriteAllTextAsync(sha512Path, sha512, cancellationToken);
-
-        return PackageStoreResult.Stored;
     }
 
     public async Task<Stream?> OpenNupkgAsync(PackageIdentity identity, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(identity);
+        ValidateIdentity(identity);
 
-        string nupkgPath = NupkgPath(_storePath, identity);
+        string nupkgPath = NupkgPath(identity);
         if (!File.Exists(nupkgPath))
         {
             return null;
         }
 
-        string sha512Path = Sha512Path(_storePath, identity);
+        string sha512Path = Sha512Path(identity);
         if (!File.Exists(sha512Path))
         {
             throw new PackageIntegrityException(identity);
@@ -125,35 +211,52 @@ public sealed class FileSystemPackageStore : IPackageStore
     public Task<Stream?> OpenNuspecAsync(PackageIdentity identity, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(identity);
+        ValidateIdentity(identity);
 
-        string nuspecPath = NuspecPath(_storePath, identity);
-        if (!File.Exists(nuspecPath))
+        // Use .nupkg presence as the existence signal.
+        string nupkgPath = NupkgPath(identity);
+        if (!File.Exists(nupkgPath))
         {
             return Task.FromResult<Stream?>(null);
         }
 
-        return Task.FromResult<Stream?>(new FileStream(nuspecPath, FileMode.Open, FileAccess.Read, FileShare.Read));
+        string nuspecPath = NuspecPath(identity);
+        if (!File.Exists(nuspecPath))
+        {
+            return Task.FromException<Stream?>(new PackageIntegrityException(identity));
+        }
+
+        return Task.FromResult<Stream?>(
+            new FileStream(nuspecPath, FileMode.Open, FileAccess.Read, FileShare.Read));
     }
 
     public async Task<PackageMetadata?> GetMetadataAsync(PackageIdentity identity, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(identity);
+        ValidateIdentity(identity);
 
-        string nupkgPath = NupkgPath(_storePath, identity);
+        string nupkgPath = NupkgPath(identity);
         if (!File.Exists(nupkgPath))
         {
             return null;
         }
 
-        string sha512Path = Sha512Path(_storePath, identity);
+        string sha512Path = Sha512Path(identity);
         if (!File.Exists(sha512Path))
         {
             throw new PackageIntegrityException(identity);
         }
 
-        string sha512 = await File.ReadAllTextAsync(sha512Path, cancellationToken);
+        // Verify integrity before serving metadata.
+        string storedHash = await File.ReadAllTextAsync(sha512Path, cancellationToken);
+        string actualHash = await ComputeSha512FromFileAsync(nupkgPath, cancellationToken);
 
-        string nuspecPath = NuspecPath(_storePath, identity);
+        if (!string.Equals(storedHash, actualHash, StringComparison.Ordinal))
+        {
+            throw new PackageIntegrityException(identity);
+        }
+
+        string nuspecPath = NuspecPath(identity);
         if (!File.Exists(nuspecPath))
         {
             throw new PackageIntegrityException(identity);
@@ -161,20 +264,22 @@ public sealed class FileSystemPackageStore : IPackageStore
 
         string nuspecContent = await File.ReadAllTextAsync(nuspecPath, cancellationToken);
 
-        return new PackageMetadata(identity, sha512, nuspecContent);
+        return new PackageMetadata(identity, storedHash, nuspecContent);
     }
 
     public Task<bool> ExistsAsync(PackageIdentity identity, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(identity);
-        return Task.FromResult(File.Exists(NupkgPath(_storePath, identity)));
+        ValidateIdentity(identity);
+        return Task.FromResult(File.Exists(NupkgPath(identity)));
     }
 
     public Task DeleteAsync(PackageIdentity identity, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(identity);
+        ValidateIdentity(identity);
 
-        string dir = PackageDir(_storePath, identity);
+        string dir = PackageDir(identity);
         if (Directory.Exists(dir))
         {
             Directory.Delete(dir, recursive: true);
