@@ -8,7 +8,7 @@ namespace Arbor.DevPackages.Server;
 /// </summary>
 internal sealed class SemVerComparer : IComparer<string>
 {
-    public static readonly SemVerComparer Instance = new();
+    internal static readonly SemVerComparer Instance = new();
 
     public int Compare(string? x, string? y)
     {

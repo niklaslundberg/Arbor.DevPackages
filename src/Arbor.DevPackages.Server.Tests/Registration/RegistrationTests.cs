@@ -27,6 +27,8 @@ public sealed class RegistrationTests : IClassFixture<WebApplicationFactory<Prog
 
     private static readonly PackageIdentity TestIdentity = new("Serilog", "3.1.1");
 
+    private static readonly byte[] FakeNupkgBytes = Encoding.UTF8.GetBytes("fake-nupkg");
+
     private static readonly string TestNuspec =
         "<package><metadata>" +
         "<id>Serilog</id>" +
@@ -55,7 +57,7 @@ public sealed class RegistrationTests : IClassFixture<WebApplicationFactory<Prog
     private static InMemoryPackageStore StoreWithTestPackage()
     {
         var store = new InMemoryPackageStore();
-        store.Add(TestIdentity, Encoding.UTF8.GetBytes("fake-nupkg"), TestNuspec);
+        store.Add(TestIdentity, FakeNupkgBytes, TestNuspec);
         return store;
     }
 
@@ -111,9 +113,9 @@ public sealed class RegistrationTests : IClassFixture<WebApplicationFactory<Prog
     {
         // Add versions deliberately out of order to verify semver sorting.
         var store = new InMemoryPackageStore();
-        store.Add(new PackageIdentity("Serilog", "2.0.0"), Encoding.UTF8.GetBytes("fake"), TestNuspec);
-        store.Add(new PackageIdentity("Serilog", "1.0.0-beta"), Encoding.UTF8.GetBytes("fake"), TestNuspec);
-        store.Add(new PackageIdentity("Serilog", "1.0.0"), Encoding.UTF8.GetBytes("fake"), TestNuspec);
+        store.Add(new PackageIdentity("Serilog", "2.0.0"), FakeNupkgBytes, TestNuspec);
+        store.Add(new PackageIdentity("Serilog", "1.0.0-beta"), FakeNupkgBytes, TestNuspec);
+        store.Add(new PackageIdentity("Serilog", "1.0.0"), FakeNupkgBytes, TestNuspec);
 
         using var factory = BuildFactory(store);
         var client = factory.CreateClient();
