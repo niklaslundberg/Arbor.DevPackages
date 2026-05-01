@@ -106,6 +106,37 @@ public sealed class RegistrationTests : IClassFixture<WebApplicationFactory<Prog
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    [Fact]
+    public async Task GetRegistrationIndex_MultipleVersions_ReturnsSemVerSortedWithCorrectBounds()
+    {
+        // Add versions deliberately out of order to verify semver sorting.
+        var store = new InMemoryPackageStore();
+        store.Add(new PackageIdentity("Serilog", "2.0.0"), Encoding.UTF8.GetBytes("fake"), TestNuspec);
+        store.Add(new PackageIdentity("Serilog", "1.0.0-beta"), Encoding.UTF8.GetBytes("fake"), TestNuspec);
+        store.Add(new PackageIdentity("Serilog", "1.0.0"), Encoding.UTF8.GetBytes("fake"), TestNuspec);
+
+        using var factory = BuildFactory(store);
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/v3/registration/serilog/index.json");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+        var page = doc.RootElement.GetProperty("items")[0];
+
+        // Semver order: 1.0.0-beta < 1.0.0 < 2.0.0
+        page.GetProperty("lower").GetString().Should().Be("1.0.0-beta");
+        page.GetProperty("upper").GetString().Should().Be("2.0.0");
+
+        var leafItems = page.GetProperty("items");
+        leafItems.GetArrayLength().Should().Be(3);
+        leafItems[0].GetProperty("catalogEntry").GetProperty("version").GetString().Should().Be("1.0.0-beta");
+        leafItems[1].GetProperty("catalogEntry").GetProperty("version").GetString().Should().Be("1.0.0");
+        leafItems[2].GetProperty("catalogEntry").GetProperty("version").GetString().Should().Be("2.0.0");
+    }
+
     // ─── Registration leaf ────────────────────────────────────────────────────
 
     [Fact]

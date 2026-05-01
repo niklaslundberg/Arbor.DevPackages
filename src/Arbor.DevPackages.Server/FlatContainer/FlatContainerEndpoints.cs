@@ -4,7 +4,6 @@ using Arbor.DevPackages.Core.Packages;
 using Arbor.DevPackages.Core.Statistics;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using NuGet.Versioning;
 
 namespace Arbor.DevPackages.Server.FlatContainer;
 
@@ -118,20 +117,6 @@ public static class FlatContainerEndpoints
         return Results.Bytes(bytes, contentType: "application/xml");
     }
 
-    private sealed class SemVerComparer : IComparer<string>
-    {
-        public static readonly SemVerComparer Instance = new();
-
-        public int Compare(string? x, string? y)
-        {
-            if (NuGetVersion.TryParse(x, out var vx) && NuGetVersion.TryParse(y, out var vy))
-            {
-                return VersionComparer.Default.Compare(vx, vy);
-            }
-
-            return StringComparer.Ordinal.Compare(x, y);
-        }
-    }
 }
 
 internal sealed record VersionListResponse(

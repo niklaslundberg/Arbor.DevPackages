@@ -9,11 +9,12 @@ namespace Arbor.DevPackages.Server.Registration;
 /// Registration v3.6.0 JSON responses. All methods are side-effect-free and
 /// independently unit-testable.
 /// </summary>
-public static class RegistrationIndexBuilder
+internal static class RegistrationIndexBuilder
 {
     /// <summary>
     /// Builds the registration index for a given package ID from a list of its versions.
     /// All versions are inlined in a single page (no external page references).
+    /// The input list is sorted by semantic version internally; callers need not pre-sort.
     /// </summary>
     public static RegistrationIndexResponse BuildIndex(
         string baseUrl,
@@ -23,6 +24,7 @@ public static class RegistrationIndexBuilder
         var indexUrl = IndexUrl(baseUrl, id);
 
         var leafItems = packages
+            .OrderBy(p => p.Identity.Version, SemVerComparer.Instance)
             .Select(p => BuildLeafItem(baseUrl, p))
             .ToArray();
 
@@ -72,7 +74,7 @@ public static class RegistrationIndexBuilder
             Authors: authors,
             Description: description,
             Listed: true,
-            Published: "2000-01-01T00:00:00+00:00");
+            Published: "1970-01-01T00:00:00+00:00");
 
         return new RegistrationLeafItem(
             Id: leafUrl,
@@ -102,7 +104,7 @@ public static class RegistrationIndexBuilder
 
 // ─── Response models ──────────────────────────────────────────────────────────
 
-public sealed record RegistrationIndexResponse(
+internal sealed record RegistrationIndexResponse(
     [property: JsonPropertyName("@id")] string Id,
     [property: JsonPropertyName("count")] int Count,
     [property: JsonPropertyName("items")] IReadOnlyList<RegistrationPage> Items)
@@ -111,7 +113,7 @@ public sealed record RegistrationIndexResponse(
     public IReadOnlyList<string> Type { get; } = ["catalog:CatalogRoot", "PackageRegistration", "catalog:Permalink"];
 }
 
-public sealed record RegistrationPage(
+internal sealed record RegistrationPage(
     [property: JsonPropertyName("@id")] string Id,
     [property: JsonPropertyName("count")] int Count,
     [property: JsonPropertyName("items")] IReadOnlyList<RegistrationLeafItem> Items,
@@ -122,7 +124,7 @@ public sealed record RegistrationPage(
     public string Type { get; } = "catalog:CatalogPage";
 }
 
-public sealed record RegistrationLeafItem(
+internal sealed record RegistrationLeafItem(
     [property: JsonPropertyName("@id")] string Id,
     [property: JsonPropertyName("catalogEntry")] CatalogEntry CatalogEntry,
     [property: JsonPropertyName("packageContent")] string PackageContent,
@@ -132,7 +134,7 @@ public sealed record RegistrationLeafItem(
     public string Type { get; } = "Package";
 }
 
-public sealed record RegistrationLeafResponse(
+internal sealed record RegistrationLeafResponse(
     [property: JsonPropertyName("@id")] string Id,
     [property: JsonPropertyName("catalogEntry")] CatalogEntry CatalogEntry,
     [property: JsonPropertyName("packageContent")] string PackageContent,
@@ -148,7 +150,7 @@ public sealed record RegistrationLeafResponse(
     public string Published => CatalogEntry.Published;
 }
 
-public sealed record CatalogEntry(
+internal sealed record CatalogEntry(
     [property: JsonPropertyName("@id")] string Id,
     [property: JsonPropertyName("id")] string PackageId,
     [property: JsonPropertyName("version")] string Version,
@@ -160,3 +162,4 @@ public sealed record CatalogEntry(
     [JsonPropertyName("@type")]
     public string Type { get; } = "PackageCatalogEntry";
 }
+
