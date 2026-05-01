@@ -308,11 +308,15 @@ Each feed should expose a `allow-prerelease` flag. The proxy layer respects this
 | Concern | Technology |
 |---|---|
 | Runtime | .NET 10 |
-| HTTP server | ASP.NET Core (Kestrel) |
+| HTTP server | ASP.NET Core (Kestrel) with **Minimal APIs** |
+| API style | ASP.NET Core Minimal APIs (`app.MapGet`, `MapGroup`) — no MVC controllers |
+| Application host / orchestration | **.NET Aspire** (latest stable) — `AppHost` + `ServiceDefaults` |
+| Observability | OpenTelemetry (traces, metrics, logs) via Aspire `ServiceDefaults` |
+| Health checks | ASP.NET Core Health Checks, surfaced via Aspire dashboard |
 | Metadata storage | SQLite (via `Microsoft.Data.Sqlite`) |
 | Package blob storage | Local filesystem |
 | Configuration | `Microsoft.Extensions.Configuration` + `appsettings.json` |
-| Logging | `Microsoft.Extensions.Logging` + Serilog |
+| Logging | `Microsoft.Extensions.Logging` + OpenTelemetry log exporter (replaces Serilog) |
 | HTTP client (upstream proxy) | `HttpClient` with `IHttpClientFactory` |
 | Testing | xUnit + AwesomeAssertions + `WebApplicationFactory` |
 | CI | GitHub Actions |

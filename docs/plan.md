@@ -16,6 +16,90 @@
 
 ---
 
+## Technology Decisions
+
+### ASP.NET Core Minimal APIs
+
+All HTTP endpoints are implemented using **ASP.NET Core Minimal APIs** (`app.MapGet`, `app.MapPost`, `app.MapGroup`). No MVC controllers are used.
+
+Rationale:
+- Leaner code — no `[ApiController]`, `[Route]`, or action-method boilerplate.
+- Endpoint handlers are plain delegates or static methods, trivially unit-testable without HTTP infrastructure.
+- Endpoint groups (`app.MapGroup("/v3/flatcontainer")`) keep route prefixes co-located with their handlers.
+- Parameter binding is explicit and compile-time safe.
+
+**Organisation pattern:** Each feature registers its own endpoints via an extension method on `IEndpointRouteBuilder`:
+
+```csharp
+// FlatContainerEndpoints.cs
+public static class FlatContainerEndpoints
+{
+    public static IEndpointRouteBuilder MapFlatContainer(this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/v3/flatcontainer");
+        group.MapGet("{id}/index.json", GetVersionListAsync);
+        group.MapGet("{id}/{version}/{filename}", DownloadPackageFileAsync);
+        return app;
+    }
+}
+```
+
+`Program.cs` wires them all:
+
+```csharp
+app.MapServiceIndex();
+app.MapFlatContainer();
+app.MapRegistration();
+app.MapSearch();
+app.MapStats();
+```
+
+Integration tests continue to use `WebApplicationFactory<Program>` — no change to test infrastructure.
+
+### .NET Aspire
+
+The solution uses **.NET Aspire (latest stable)** for the application host, observability defaults, and developer dashboard.
+
+**Added projects:**
+
+| Project | SDK | Purpose |
+|---|---|---|
+| `Arbor.DevPackages.AppHost` | `Aspire.Hosting.AppHost` | Declares and wires up the distributed application; entry point for `dotnet run` during development |
+| `Arbor.DevPackages.ServiceDefaults` | `Microsoft.NET.Sdk` | Shared Aspire service defaults: OpenTelemetry tracing/metrics, health checks, service discovery client |
+
+**What Aspire provides out-of-the-box (via `ServiceDefaults`):**
+- Structured OpenTelemetry traces and metrics — replaces manual Serilog wiring for most scenarios.
+- `/health` and `/alive` health-check endpoints on the server.
+- Aspire Developer Dashboard (local UI at `http://localhost:15888`) — visualises logs, traces, and resource state during development.
+- `IServiceCollection.AddServiceDefaults()` / `WebApplication.MapDefaultEndpoints()` pattern.
+
+**What Aspire does not replace:**
+- `IPackageStore`, retention, proxy, and statistics logic — these remain in `Core` and `Storage.Sqlite`.
+- SQLite configuration — still in `appsettings.json`; Aspire does not manage the SQLite file.
+- NuGet v3 endpoint logic.
+
+**AppHost registration example:**
+
+```csharp
+// AppHost/Program.cs
+var builder = DistributedApplication.CreateBuilder(args);
+builder.AddProject<Projects.Arbor_DevPackages_Server>("server");
+builder.Build().Run();
+```
+
+**Aspire packages (to pin in `Directory.Packages.props`):**
+
+| Package | Used in |
+|---|---|
+| `Aspire.Hosting.AppHost` | `AppHost` |
+| `Microsoft.Extensions.ServiceDiscovery` | `ServiceDefaults`, `Server` |
+| `OpenTelemetry.Exporter.OpenTelemetryProtocol` | `ServiceDefaults` |
+| `OpenTelemetry.Extensions.Hosting` | `ServiceDefaults` |
+| `OpenTelemetry.Instrumentation.AspNetCore` | `ServiceDefaults` |
+| `OpenTelemetry.Instrumentation.Http` | `ServiceDefaults` |
+
+---
+
 ## Project Structure
 
 ```
@@ -23,15 +107,17 @@ Arbor.DevPackages.slnx
 Directory.Packages.props
 THIRD_PARTY_NOTICES.md
 src/
-  Arbor.DevPackages.Core/           # UI-agnostic business logic and interfaces
-    Feeds/                          # Feed configuration, routing
-    Proxy/                          # Read-through proxy, connectivity probe
-    Packages/                       # Package store, hash verification
-    Retention/                      # Retention engine and policies
-    Statistics/                     # Usage statistics collection
-  Arbor.DevPackages.Storage.Sqlite/ # SQLite implementations of Core abstractions
-  Arbor.DevPackages.Server/         # ASP.NET Core host, NuGet v3 endpoints
-  Arbor.DevPackages.Testing/        # Shared test doubles, in-memory implementations
+  Arbor.DevPackages.AppHost/          # Aspire app host — wires up services for local dev
+  Arbor.DevPackages.ServiceDefaults/  # Shared Aspire defaults: OTel, health checks
+  Arbor.DevPackages.Core/             # UI-agnostic business logic and interfaces
+    Feeds/                            # Feed configuration, routing
+    Proxy/                            # Read-through proxy, connectivity probe
+    Packages/                         # Package store, hash verification
+    Retention/                        # Retention engine and policies
+    Statistics/                       # Usage statistics collection
+  Arbor.DevPackages.Storage.Sqlite/   # SQLite implementations of Core abstractions
+  Arbor.DevPackages.Server/           # ASP.NET Core host, NuGet v3 Minimal API endpoints
+  Arbor.DevPackages.Testing/          # Shared test doubles, in-memory implementations
   Arbor.DevPackages.Core.Tests/
   Arbor.DevPackages.Storage.Sqlite.Tests/
   Arbor.DevPackages.Server.Tests/
@@ -49,16 +135,21 @@ src/
 - `Directory.Packages.props` with all NuGet package versions pinned centrally. Initial packages:
   - `Microsoft.NET.Sdk.Web` (SDK, no version)
   - `Microsoft.Data.Sqlite` (storage)
+  - `Aspire.Hosting.AppHost` (AppHost SDK — version pinned to latest stable)
+  - `Microsoft.Extensions.ServiceDiscovery` (ServiceDefaults + Server)
+  - `OpenTelemetry.Extensions.Hosting`, `OpenTelemetry.Instrumentation.AspNetCore`, `OpenTelemetry.Instrumentation.Http`, `OpenTelemetry.Exporter.OpenTelemetryProtocol` (ServiceDefaults)
   - `xunit` + `xunit.runner.visualstudio` (testing)
   - `AwesomeAssertions` (assertion library)
   - `Microsoft.AspNetCore.Mvc.Testing` (`WebApplicationFactory`)
   - `coverlet.collector` (code coverage)
-- All six projects listed above, each with `.csproj` targeting `net10.0` / `net10.0-windows` as appropriate.
+- All eight projects listed above, each with `.csproj` targeting `net10.0`.
 - `<Nullable>enable</Nullable>` and `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>` in `Directory.Build.props`.
+- `Arbor.DevPackages.ServiceDefaults` — calls `AddServiceDefaults()` extension wiring OpenTelemetry tracing, metrics, and health checks.
+- `Arbor.DevPackages.AppHost` — registers `Arbor.DevPackages.Server` as an Aspire resource; entry point for `dotnet run` in development.
+- `Arbor.DevPackages.Server/Program.cs` — calls `builder.AddServiceDefaults()` and `app.MapDefaultEndpoints()` before any feature endpoint registration.
 - A passing smoke test in each `*.Tests` project:
 
   ```csharp
-  // Smoke_SolutionBuilds_NoWarnings
   [Fact]
   public void Smoke_SolutionBuilds() => Assert.True(true);
   ```
@@ -259,8 +350,8 @@ The `@id` values are built dynamically from `HttpContext.Request.Host` + configu
 
 ### Production code (in `Arbor.DevPackages.Server`)
 
-- `ServiceIndexController` — maps `GET /v3/index.json` → returns JSON.
-- `Program.cs` / `Startup` — minimal `WebApplication` with no authentication; HTTP only; listens on `http://localhost:5000` by default (overridable via `appsettings.json`).
+- `ServiceIndexEndpoints.cs` — registers `app.MapGet("/v3/index.json", ...)` returning the service index JSON.
+- `Program.cs` — minimal `WebApplication`; calls `builder.AddServiceDefaults()`, then `app.MapDefaultEndpoints()`, then `app.MapServiceIndex()`; no authentication; HTTP only; listens on `http://localhost:5000` by default (overridable via `appsettings.json`).
 
 ### Tests to write (in `Arbor.DevPackages.Server.Tests`, using `WebApplicationFactory`)
 
@@ -272,7 +363,7 @@ GetServiceIndex_ContentType_IsApplicationJson
 
 ### TDD steps
 
-1. Write `GetServiceIndex_ReturnsOkWithCorrectVersionAndResources` → fails (no controller) → implement controller → passes.
+1. Write `GetServiceIndex_ReturnsOkWithCorrectVersionAndResources` → fails (no endpoint) → implement `ServiceIndexEndpoints.MapServiceIndex()` → passes.
 2. Verify the real NuGet.Protocol client can load the service index from the test server.
 
 ---
@@ -298,9 +389,8 @@ Rules:
 
 ### Production code (in `Arbor.DevPackages.Server`)
 
-- `FlatContainerController` — handles the three routes above.
-- Injects `IPackageStore`, `IStatisticsCollector`.
-- For now, if the package is not in the store, returns `404` (upstream proxy is wired in Iteration 8).
+- `FlatContainerEndpoints.cs` — registers a `MapGroup("/v3/flatcontainer")` with three route handlers (version list, `.nupkg` download, `.nuspec` download). Route handlers inject `IPackageStore` and `IStatisticsCollector` via DI parameter binding.
+- For now, if the package is not in the store, the handler returns `Results.NotFound()` (upstream proxy is wired in Iteration 8).
 
 ### Tests to write (in `Arbor.DevPackages.Server.Tests`)
 
@@ -316,7 +406,7 @@ DownloadNuspec_KnownPackage_ReturnsXml
 
 ### TDD steps
 
-Follow the red-green-refactor cycle. Use `Arbor.DevPackages.Testing` fakes for `IPackageStore` and `IStatisticsCollector`.
+Follow the red-green-refactor cycle. Use `Arbor.DevPackages.Testing` fakes for `IPackageStore` and `IStatisticsCollector`. Register fakes via `WebApplicationFactory` `ConfigureTestServices`.
 
 ---
 
@@ -335,8 +425,8 @@ The JSON structure must conform to the [NuGet Registration v3.6.0 spec](https://
 
 ### Production code (in `Arbor.DevPackages.Server`)
 
-- `RegistrationController`
-- `RegistrationIndexBuilder` — constructs the JSON from `IPackageStore` metadata.
+- `RegistrationEndpoints.cs` — registers `MapGroup("/v3/registration")` with two route handlers (index, leaf).
+- `RegistrationIndexBuilder` — pure function: constructs the registration JSON from `IPackageStore` metadata; injectable and independently unit-testable.
 
 ### Tests to write (in `Arbor.DevPackages.Server.Tests`)
 
@@ -362,7 +452,7 @@ The last test uses a real `NuGet.Protocol` `PackageMetadataResource` against the
 - `IConnectivityProbe` tracks a `DateTimeOffset? LastFailedAt` per upstream URL.
 - `UpstreamHttpProxy : IUpstreamProxy` uses `IHttpClientFactory` to fetch from the upstream NuGet v3 flat-container URL.
 
-### Workflow (inside `FlatContainerController.DownloadNupkg`)
+### Workflow (inside `FlatContainerEndpoints.DownloadNupkg` handler)
 
 ```
 1. Check IPackageStore → found → serve from local store.
@@ -420,9 +510,9 @@ GET /v3/search?q={query}&skip={n}&take={n}&prerelease={true|false}
 
 ### Production code (in `Arbor.DevPackages.Server`)
 
-- `SearchController`
+- `SearchEndpoints.cs` — registers `app.MapGet("/v3/search", ...)` route handler; reads from `UpstreamSearchCache` and filters in-memory.
 - `UpstreamSearchCache : IHostedService` — periodic refresh every 30 minutes; persists the raw upstream search JSON in memory.
-- `SearchCacheRefreshController` — handles `POST /api/feeds/{feedId}/search-cache/refresh`.
+- `SearchCacheEndpoints.cs` — registers `app.MapPost("/api/feeds/{feedId}/search-cache/refresh", ...)` for on-demand cache busting.
 
 ### Tests to write (in `Arbor.DevPackages.Server.Tests`)
 
@@ -475,7 +565,7 @@ Each feed gets its own URL prefix:
 ### Production code
 
 - `FeedRouter : IFeedRouter` — looks up `FeedConfiguration` by ID.
-- Refactor existing controllers to extract feed ID from route and inject the correct configuration via `IFeedRouter`.
+- Refactor existing endpoint modules to accept feed ID as a route segment and resolve the correct `FeedConfiguration` via `IFeedRouter`. Each feature's `MapGroup` is nested under `/feeds/{feedId}`.
 - Add feed-aware search filtering (`AllowPrerelease`).
 
 ### Tests to write
@@ -566,6 +656,12 @@ Planned third-party dependencies:
 | Package | Version (to pin) | License | Used in |
 |---|---|---|---|
 | `Microsoft.Data.Sqlite` | 9.x | MIT | Storage |
+| `Aspire.Hosting.AppHost` | latest stable | MIT | AppHost |
+| `Microsoft.Extensions.ServiceDiscovery` | latest stable | MIT | ServiceDefaults, Server |
+| `OpenTelemetry.Extensions.Hosting` | latest stable | Apache 2.0 | ServiceDefaults |
+| `OpenTelemetry.Instrumentation.AspNetCore` | latest stable | Apache 2.0 | ServiceDefaults |
+| `OpenTelemetry.Instrumentation.Http` | latest stable | Apache 2.0 | ServiceDefaults |
+| `OpenTelemetry.Exporter.OpenTelemetryProtocol` | latest stable | Apache 2.0 | ServiceDefaults |
 | `xunit` | 2.x | Apache 2.0 | Testing |
 | `xunit.runner.visualstudio` | 2.x | Apache 2.0 | Testing |
 | `AwesomeAssertions` | 1.x | MIT | Testing |
