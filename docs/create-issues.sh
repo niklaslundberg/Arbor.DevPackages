@@ -1,14 +1,34 @@
 #!/usr/bin/env bash
 # Creates one GitHub issue per plan iteration.
-# Run from the repository root with: bash docs/create-issues.sh
+# Run from the repository root with: bash docs/create-issues.sh [owner/repo]
 # Requires the GitHub CLI (gh) and authentication: gh auth login
 
 set -euo pipefail
 
-REPO="niklaslundberg/Arbor.DevPackages"
+REPO="${1:-${REPO:-}}"
 
-gh issue create \
-  --repo "$REPO" \
+if [ -z "$REPO" ]; then
+  REPO="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
+fi
+
+# Creates an issue only if one with the same title does not already exist.
+create_issue() {
+  local title=""
+  local args=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --title) title="$2"; shift 2 ;;
+      *) args+=("$1"); shift ;;
+    esac
+  done
+  if gh issue list --repo "$REPO" --search "\"${title}\" in:title" --json number -q '.[0].number' 2>/dev/null | grep -q .; then
+    echo "Issue '${title}' already exists — skipping."
+  else
+    gh issue create --repo "$REPO" --title "$title" "${args[@]}"
+  fi
+}
+
+create_issue \
   --title "Iteration 0 — Solution scaffold" \
   --label "enhancement" \
   --body "$(cat <<'BODY'
@@ -45,8 +65,7 @@ Part of the implementation plan in `docs/plan.md`.
 BODY
 )"
 
-gh issue create \
-  --repo "$REPO" \
+create_issue \
   --title "Iteration 1 — Domain model and core interfaces" \
   --label "enhancement" \
   --body "$(cat <<'BODY'
@@ -80,8 +99,7 @@ FeedConfiguration_AllowPrerelease_DefaultsToFalse
 BODY
 )"
 
-gh issue create \
-  --repo "$REPO" \
+create_issue \
   --title "Iteration 2 — Local package store (filesystem)" \
   --label "enhancement" \
   --body "$(cat <<'BODY'
@@ -121,8 +139,7 @@ Read_TamperedPackage_ThrowsPackageIntegrityException
 BODY
 )"
 
-gh issue create \
-  --repo "$REPO" \
+create_issue \
   --title "Iteration 3 — Statistics (SQLite)" \
   --label "enhancement" \
   --body "$(cat <<'BODY'
@@ -159,8 +176,7 @@ GetLastDownloadAcrossAllPackages_ReturnsLatestTimestamp
 BODY
 )"
 
-gh issue create \
-  --repo "$REPO" \
+create_issue \
   --title "Iteration 4 — Retention engine" \
   --label "enhancement" \
   --body "$(cat <<'BODY'
@@ -201,8 +217,7 @@ Use in-memory doubles for `IStatisticsReader`, `IPackageStore`, and the system c
 BODY
 )"
 
-gh issue create \
-  --repo "$REPO" \
+create_issue \
   --title "Iteration 5 — NuGet v3 service index" \
   --label "enhancement" \
   --body "$(cat <<'BODY'
@@ -234,8 +249,7 @@ Verify a real `NuGet.Protocol` client can load the service index from the test s
 BODY
 )"
 
-gh issue create \
-  --repo "$REPO" \
+create_issue \
   --title "Iteration 6 — PackageBaseAddress (flat-container) endpoints" \
   --label "enhancement" \
   --body "$(cat <<'BODY'
@@ -276,8 +290,7 @@ DownloadNuspec_KnownPackage_ReturnsXml
 BODY
 )"
 
-gh issue create \
-  --repo "$REPO" \
+create_issue \
   --title "Iteration 7 — RegistrationsBaseUrl (metadata) endpoints" \
   --label "enhancement" \
   --body "$(cat <<'BODY'
@@ -313,8 +326,7 @@ The last test uses a real `NuGet.Protocol` `PackageMetadataResource` against the
 BODY
 )"
 
-gh issue create \
-  --repo "$REPO" \
+create_issue \
   --title "Iteration 8 — Read-through proxy and connectivity probe" \
   --label "enhancement" \
   --body "$(cat <<'BODY'
@@ -360,8 +372,7 @@ DownloadNupkg_UpstreamFetchFails_Returns502AndMarksOffline
 BODY
 )"
 
-gh issue create \
-  --repo "$REPO" \
+create_issue \
   --title "Iteration 9 — Search endpoint" \
   --label "enhancement" \
   --body "$(cat <<'BODY'
@@ -397,8 +408,7 @@ SearchCacheRefresh_Returns200
 BODY
 )"
 
-gh issue create \
-  --repo "$REPO" \
+create_issue \
   --title "Iteration 10 — Multiple feeds" \
   --label "enhancement" \
   --body "$(cat <<'BODY'
@@ -440,8 +450,7 @@ ServiceIndex_PerFeed_ResourcesPointToCorrectFeedPath
 BODY
 )"
 
-gh issue create \
-  --repo "$REPO" \
+create_issue \
   --title "Iteration 11 — Stats read endpoint" \
   --label "enhancement" \
   --body "$(cat <<'BODY'
@@ -469,9 +478,8 @@ GetStats_WithNoDownloads_ReturnsEmptyArray
 BODY
 )"
 
-gh issue create \
-  --repo "$REPO" \
-  --title "Iteration 13 — System tests (end-to-end)" \
+create_issue \
+  --title "Iteration 12 — System tests (end-to-end)" \
   --label "enhancement" \
   --body "$(cat <<'BODY'
 Part of the implementation plan in `docs/plan.md`.
@@ -517,16 +525,15 @@ System tests use only xUnit and AwesomeAssertions — already planned. No WireMo
 BODY
 )"
 
-gh issue create \
-  --repo "$REPO" \
-  --title "Iteration 12 — HTTPS support (deferred)" \
+create_issue \
+  --title "Iteration 13 — HTTPS support (deferred)" \
   --label "enhancement" \
   --body "$(cat <<'BODY'
 Part of the implementation plan in `docs/plan.md`.
 
 **Goal:** Add HTTPS as an opt-in configuration option. HTTP remains the default for local developer use.
 
-**Note:** This iteration is intentionally deferred. Implement only after Iteration 13 (system tests) is complete and green.
+**Note:** This iteration is intentionally deferred. Implement only after Iteration 12 (system tests) is complete and green.
 
 ## Checklist
 - [ ] Use ASP.NET Core Kestrel developer certificate (`dotnet dev-certs`) in development mode

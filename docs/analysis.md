@@ -251,7 +251,7 @@ Each feed should expose a `allow-prerelease` flag. The proxy layer respects this
 ### 6.4 TLS
 
 - **Initial implementation uses HTTP only** — this server targets local developer machines and is not a shared server.
-- HTTPS will be added in Iteration 12 (see [`docs/plan.md`](plan.md)) using ASP.NET Core Kestrel with a developer certificate.
+- HTTPS will be added in Iteration 13 (see [`docs/plan.md`](plan.md)) using ASP.NET Core Kestrel with a developer certificate.
 - Never downgrade TLS below 1.2 when HTTPS is introduced.
 - The `SslProtocols.None`, `SslProtocols.Ssl3`, and `SslProtocols.Tls` (TLS 1.0) values must never be used.
 

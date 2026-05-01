@@ -12,7 +12,7 @@
 2. **Smallest useful increment:** Each iteration delivers a working, tested, and releasable slice of functionality.
 3. **Vertical slices:** New code lives inside its own feature folder; no horizontal type-based layers.
 4. **No speculative code:** Only what the current iteration demands. Abstractions are introduced when they have at least two concrete implementations.
-5. **HTTP only first:** HTTPS is deferred to a later iteration (the server targets local developer machines).
+5. **HTTP first, HTTPS opt-in:** The server runs on HTTP by default for local developer use. HTTPS is a later opt-in iteration; it is never required for local loopback scenarios.
 
 ---
 
@@ -608,7 +608,7 @@ GetStats_WithNoDownloads_ReturnsEmptyArray
 
 ---
 
-## Iteration 13 — System tests (end-to-end)
+## Iteration 12 — System tests (end-to-end)
 
 **Goal:** Verify the real, fully-assembled application from the outside with zero fakes, mocks, or test doubles of any kind. A real `dotnet restore` subprocess runs against a real server process using only production code and production configuration. Nothing is substituted, intercepted, or simulated.
 
@@ -705,7 +705,7 @@ System tests require no additional NuGet packages beyond those already planned (
 
 ---
 
-## Iteration 12 — HTTPS support (deferred)
+## Iteration 13 — HTTPS support (deferred)
 
 **Goal:** Add HTTPS as an opt-in configuration option. HTTP remains the default for local developer use.
 
