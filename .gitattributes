@@ -1,0 +1,51 @@
+# Set default behavior to automatically normalize line endings.
+* text=auto
+
+# Force shell scripts to always use LF for Unix compatibility.
+*.in text eol=lf
+*.sh text eol=lf
+
+# Force Windows command scripts to use CRLF.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Keep solution files in CRLF to match Visual Studio defaults.
+*.sln text eol=crlf
+*.slnx text eol=crlf
+
+# Common source/text formats.
+*.cs text diff=csharp
+*.csx text
+*.axaml text
+*.xaml text
+*.xml text
+*.props text
+*.targets text
+*.csproj text
+*.json text
+*.yml text
+*.yaml text
+*.md text
+
+# Binary files.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.eot binary
+*.dll binary
+*.exe binary
+*.pdb binary
+*.zip binary
+*.7z binary
+*.tar binary
+*.gz binary
+*.nupkg binary
+*.snupkg binary
