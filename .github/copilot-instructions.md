@@ -51,12 +51,15 @@ Before implementing:
 - Every async method that performs I/O must accept `CancellationToken cancellationToken` as its last parameter and pass it downstream.
 - Never use `Task.Run` to offload CPU work that isn't genuinely CPU-bound.
 - Never `await` inside a `lock`; use `SemaphoreSlim` instead.
+- Don't add unnecessary `async`/`await` when you can return the `Task`/`ValueTask` directly. When a method solely delegates to one other async call, use an expression body and return the task directly (e.g., `public ValueTask DisposeAsync() => _connection.DisposeAsync();`).
 
 ### Exception handling
 
 - Use `throw;` (not `throw ex;`) when rethrowing to preserve the stack trace.
 - Do not swallow exceptions silently. Log and rethrow or let them propagate.
 - Only catch exceptions you can meaningfully handle at the call site.
+- When catching for exception translation (e.g., `IOException` → `AlreadyExists`), catch only the specific exception type — never a broad `catch (Exception)`.
+- Custom public exception types must provide the three standard constructors: parameterless, `(string message)`, and `(string message, Exception innerException)`. Failing to do so triggers CA1032 and, with `TreatWarningsAsErrors=true`, breaks the build.
 
 ### Null safety
 
@@ -68,19 +71,40 @@ Before implementing:
 
 - Prefer `readonly` fields and `init`-only properties.
 - Prefer immutable collections (`IReadOnlyList<T>`, etc.) in return types and properties.
+- When moving files atomically, always use the no-overwrite form (`overwrite: false`) to prevent silently replacing an existing file.
 
 ### Date and time
 
 - Use `DateTimeOffset` (not `DateTime`) for all timestamps to preserve timezone information.
+- When storing timestamps in SQLite `TEXT` columns, always normalize to UTC (`UtcDateTime.ToString("O")`) so that lexicographic comparisons (e.g., `MAX(downloaded_at)`) produce correct results across different source offsets.
+- When parsing stored timestamps, always use `CultureInfo.InvariantCulture` and `DateTimeStyles.RoundtripKind`.
+
+### File system and path safety
+
+- Validate all path components derived from user-controlled input (e.g., package ID, version) before constructing file paths: reject values containing path separators, `..`, or rooted paths.
+- After calling `Path.Combine`, verify the resolved path stays within the store root: confirm `Path.GetFullPath(combined)` starts with `Path.GetFullPath(storeRoot) + Path.DirectorySeparatorChar`.
+- Normalize the root directory path by trimming any trailing directory separators before storing it.
+
+### Atomicity and concurrency
+
+- Write new files to a temporary name (e.g., `.tmp` suffix) first; rename them atomically into the final location once all data is safely on disk.
+- Use the **commit marker** pattern: write `.nuspec` and `.sha512` temp files before moving `.nupkg` into its final name, so a reader that sees `.nupkg` is guaranteed the full set of files is present.
+- On `AlreadyExists` or error paths, clean up any temp files before returning or rethrowing.
+- Never use check-then-act patterns for file existence; catch the `IOException` thrown by `FileMode.CreateNew` and translate it to the appropriate result (e.g., `PackageStoreResult.AlreadyExists`).
+- Never share a single `SqliteConnection` instance across concurrent consumers; use a connection factory (open a new connection per unit of work).
 
 ## 4. Testing
 
 - Test naming: `Method_Scenario_ExpectedResult` (e.g. `ProbeUpstream_WhenOffline_ReturnsOfflineStatus`).
+- The test method name must reflect the **actual production method being tested** — use `OpenNupkgAsync_StoredPackage_ReturnsSameBytes`, not `Read_StoredPackage_ReturnsSameBytes`.
 - New or changed production code must include test coverage.
+- Every public method must have at least one test. Untested public methods are not acceptable even when the uncovered lines appear trivial.
 - Use `xUnit` + `AwesomeAssertions`.
 - Use `WebApplicationFactory<TEntryPoint>` for HTTP endpoint integration tests.
 - Test project boundaries must mirror library boundaries: tests for a library live in a dedicated test project referencing only that library and shared test helpers.
 - Do not add cross-layer `<ProjectReference>` entries to an existing test project.
+- Timestamp-sensitive tests must include at least one scenario with a non-UTC offset (e.g., `+02:00`) to validate correct ordering/comparison logic.
+- PR description test lists must accurately reflect the tests that are actually in the commit (correct count and names).
 
 ### Code coverage
 
@@ -154,6 +178,7 @@ No `Models/`, `Services/`, `Abstractions/`, or `Helpers/` directories at the top
 - Deletion is permitted only when triggered by a configured retention policy.
 - Retention policy changes must not take effect immediately; log the planned purge list before deleting.
 - Statistics must be updated atomically with the download record.
+- Integrity verification (SHA-512 check) must apply to **every** read path — `OpenNupkgAsync`, `OpenNuspecAsync`, and `GetMetadataAsync` — not only the primary download endpoint. Never serve any package artifact if its integrity cannot be confirmed.
 
 ## 10. Commit and PR Standards
 
@@ -170,6 +195,12 @@ If you notice a gap in these instructions during a session:
 1. Note the gap in the PR description under an **Instruction Retrospective** heading.
 2. Propose the improvement as a change to this file.
 3. Apply the change and include it in the same PR if practical.
+
+## 12. SQLite / Database
+
+- Apply schema migrations in the **production initialization path**, not only in test setup. Tests must not be the only code that creates schema objects; the production `OpenAsync` / startup path must call `ApplyAsync` (or equivalent) before the database is used.
+- Never share a single `SqliteConnection` instance across concurrent callers; use a connection factory (open a new connection per unit of work or use a connection pool).
+- Wrap every locally created `SqliteConnection` in `await using` to ensure it is always disposed.
 
 ---
 
