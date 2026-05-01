@@ -22,6 +22,7 @@ Behavioral guidelines for Arbor.DevPackages. Adapted from [Arbor.HttpClient](htt
 |---|---|
 | Solution file | `Arbor.DevPackages.slnx` (to be created) |
 | Test command | `dotnet test Arbor.DevPackages.slnx` |
+| Test command (with coverage) | `dotnet test Arbor.DevPackages.slnx --collect:"XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Threshold=80` |
 | Vulnerability audit command | `dotnet list Arbor.DevPackages.slnx package --vulnerable --include-transitive` |
 
 ## 1. Think Before Coding
@@ -80,6 +81,18 @@ Before implementing:
 - Use `WebApplicationFactory<TEntryPoint>` for HTTP endpoint integration tests.
 - Test project boundaries must mirror library boundaries: tests for a library live in a dedicated test project referencing only that library and shared test helpers.
 - Do not add cross-layer `<ProjectReference>` entries to an existing test project.
+
+### Code coverage
+
+- **Target:** 100% line and branch coverage. Exceptions are allowed only for code paths that are genuinely unreachable or where the testing cost vastly outweighs the value (e.g. generated code, defensive `default` branches in exhaustive switches). Document each exclusion with a `// coverage: unreachable` comment.
+- **Build threshold:** 80% line coverage. The CI build **fails** if coverage drops below this threshold.
+- Coverage is collected with `coverlet.collector` (`XPlat Code Coverage` format) and enforced via `dotnet test` threshold arguments:
+
+  ```
+  dotnet test Arbor.DevPackages.slnx \
+    --collect:"XPlat Code Coverage" \
+    -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Threshold=80
+  ```
 
 ## 5. NuGet Package Management
 
