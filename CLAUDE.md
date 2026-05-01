@@ -37,6 +37,9 @@ At the beginning of every session, read these files before making any decision o
 - Write new files to a `.tmp` name and rename atomically into the final path; move `.nupkg` last (commit marker).
 - Validate package ID/version before using in file paths; verify the resolved path stays within the store root.
 - Normalize timestamps to UTC (`UtcDateTime.ToString("O")`) before storing in SQLite `TEXT` columns; parse with `CultureInfo.InvariantCulture` + `DateTimeStyles.RoundtripKind`.
+- Package identities from `IPackageStore.ListAllAsync` are always lowercase (normalised via `ToLowerInvariant()`). Statistics lookups must use the same normalisation to avoid false "never downloaded" results that cause incorrect purges.
+- `BackgroundService.ExecuteAsync`: catch `OperationCanceledException` from `Task.Delay` and return cleanly; wrap each loop iteration's work in `try/catch (Exception)` and log, so one transient failure does not permanently stop the background service.
+- Configuration options holding `TimeSpan` values must validate `> TimeSpan.Zero` at `init` time using a private backing field and a `ValidatePositive` helper — not at first use.
 - Never share a single `SqliteConnection` across concurrent callers; use a connection factory (one connection per unit of work).
 - Apply schema migrations in the production initialization path, not only in test setup.
 

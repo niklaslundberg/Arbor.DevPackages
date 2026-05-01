@@ -287,4 +287,32 @@ public sealed class FileSystemPackageStore : IPackageStore
 
         return Task.CompletedTask;
     }
+
+    public Task<IReadOnlyList<PackageIdentity>> ListAllAsync(CancellationToken cancellationToken)
+    {
+        var results = new List<PackageIdentity>();
+
+        if (!Directory.Exists(_storePath))
+        {
+            return Task.FromResult<IReadOnlyList<PackageIdentity>>(results);
+        }
+
+        foreach (string idDir in Directory.EnumerateDirectories(_storePath))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            string packageId = Path.GetFileName(idDir);
+            foreach (string versionDir in Directory.EnumerateDirectories(idDir))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                string version = Path.GetFileName(versionDir);
+                string nupkgPath = Path.Combine(versionDir, $"{packageId}.{version}.nupkg");
+                if (File.Exists(nupkgPath))
+                {
+                    results.Add(new PackageIdentity(packageId, version));
+                }
+            }
+        }
+
+        return Task.FromResult<IReadOnlyList<PackageIdentity>>(results);
+    }
 }
