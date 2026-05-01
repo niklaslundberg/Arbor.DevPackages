@@ -1,0 +1,18 @@
+<Project>
+  <!--
+    Embed the short git commit hash into AssemblyInformationalVersion as "+<hash>"
+    (via the SDK's SourceRevisionId mechanism). If git is unavailable (e.g. a clean
+    source-only build), SourceRevisionId stays empty and the version is unchanged.
+  -->
+  <Target Name="SetSourceRevisionId" BeforeTargets="GetAssemblyVersion">
+    <Exec Command="git rev-parse --short HEAD"
+          ConsoleToMSBuild="true"
+          ContinueOnError="true"
+          StandardOutputImportance="Low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_GitShortHash" />
+    </Exec>
+    <PropertyGroup Condition="'$(_GitShortHash)' != ''">
+      <SourceRevisionId>$(_GitShortHash.Trim())</SourceRevisionId>
+    </PropertyGroup>
+  </Target>
+</Project>
