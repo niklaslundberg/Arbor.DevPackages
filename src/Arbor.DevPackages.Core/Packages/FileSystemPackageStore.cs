@@ -267,6 +267,26 @@ public sealed class FileSystemPackageStore : IPackageStore
         return new PackageMetadata(identity, storedHash, nuspecContent);
     }
 
+    public async Task<string?> GetStoredHashAsync(PackageIdentity identity, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(identity);
+        ValidateIdentity(identity);
+
+        string nupkgPath = NupkgPath(identity);
+        if (!File.Exists(nupkgPath))
+        {
+            return null;
+        }
+
+        string sha512Path = Sha512Path(identity);
+        if (!File.Exists(sha512Path))
+        {
+            throw new PackageIntegrityException(identity);
+        }
+
+        return await File.ReadAllTextAsync(sha512Path, cancellationToken);
+    }
+
     public Task<bool> ExistsAsync(PackageIdentity identity, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(identity);

@@ -112,6 +112,13 @@ Arbor.DevPackages uses the following third-party packages. Each package retains 
 - **Project:** https://github.com/NuGet/NuGet.Client
 - **Used in:** `Arbor.DevPackages.Server.Tests`
 
+### NuGet.Versioning
+
+- **Version:** 7.3.1
+- **License:** Apache 2.0
+- **Project:** https://github.com/NuGet/NuGet.Client
+- **Used in:** `Arbor.DevPackages.Server` (SemVer-ordered version lists)
+
 ### xunit
 
 - **Version:** 2.9.3

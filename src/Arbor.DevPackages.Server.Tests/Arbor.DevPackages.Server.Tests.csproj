@@ -21,5 +21,6 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <ProjectReference Include="..\Arbor.DevPackages.Server\Arbor.DevPackages.Server.csproj" />
+    <ProjectReference Include="..\Arbor.DevPackages.Testing\Arbor.DevPackages.Testing.csproj" />
   </ItemGroup>
 </Project>
