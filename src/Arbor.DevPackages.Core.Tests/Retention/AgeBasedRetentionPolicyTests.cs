@@ -51,6 +51,42 @@ public sealed class AgeBasedRetentionPolicyTests
         decision.Action.Should().Be(RetentionAction.Purge);
     }
 
+    [Fact]
+    public async Task EvaluateAsync_PackageOlderThan30Days_WithNonUtcOffset_IsEligible()
+    {
+        // lastDownloadedAt is expressed in +02:00 but the UTC instant is 31 days before now.
+        DateTimeOffset now = new(2026, 5, 1, 12, 0, 0, TimeSpan.Zero);
+        // Construct a DateTimeOffset in +02:00: local time is 2 hours ahead, so UTC instant = local - 2h.
+        // We want UTC = now - 31 days, so local = (now - 31 days) + 2h.
+        TimeSpan offset = TimeSpan.FromHours(2);
+        DateTime localTime = DateTime.SpecifyKind((now - TimeSpan.FromDays(31) + offset).DateTime, DateTimeKind.Unspecified);
+        DateTimeOffset lastDownload = new(localTime, offset);
+
+        FakeStatisticsReader stats = new(Package, lastDownload);
+        AgeBasedRetentionPolicy policy = new(RetentionOptions.Default, stats, new FakeTimeProvider(now));
+
+        RetentionDecision decision = await policy.EvaluateAsync(Package, CancellationToken.None);
+
+        decision.Action.Should().Be(RetentionAction.Purge);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_PackageDownloadedToday_WithNonUtcOffset_IsNotEligible()
+    {
+        // lastDownloadedAt is expressed in +02:00 but the UTC instant is only 1 hour before now.
+        DateTimeOffset now = new(2026, 5, 1, 12, 0, 0, TimeSpan.Zero);
+        TimeSpan offset = TimeSpan.FromHours(2);
+        DateTime localTime = DateTime.SpecifyKind((now - TimeSpan.FromHours(1) + offset).DateTime, DateTimeKind.Unspecified);
+        DateTimeOffset lastDownload = new(localTime, offset);
+
+        FakeStatisticsReader stats = new(Package, lastDownload);
+        AgeBasedRetentionPolicy policy = new(RetentionOptions.Default, stats, new FakeTimeProvider(now));
+
+        RetentionDecision decision = await policy.EvaluateAsync(Package, CancellationToken.None);
+
+        decision.Action.Should().Be(RetentionAction.Keep);
+    }
+
     // --- Fakes ---
 
     private sealed class FakeStatisticsReader : IStatisticsReader

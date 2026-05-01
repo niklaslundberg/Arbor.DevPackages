@@ -40,8 +40,27 @@ public sealed class RetentionScheduler : BackgroundService, IRetentionScheduler
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            await Task.Delay(_options.SchedulerInterval, stoppingToken);
-            await ScheduleAsync(stoppingToken);
+            try
+            {
+                await Task.Delay(_options.SchedulerInterval, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                return;
+            }
+
+            try
+            {
+                await ScheduleAsync(stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError(exception, "Retention run failed.");
+            }
         }
     }
 

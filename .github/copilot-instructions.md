@@ -179,6 +179,7 @@ No `Models/`, `Services/`, `Abstractions/`, or `Helpers/` directories at the top
 - Retention policy changes must not take effect immediately; log the planned purge list before deleting.
 - Statistics must be updated atomically with the download record.
 - Integrity verification (SHA-512 check) must apply to **every** read path — `OpenNupkgAsync`, `OpenNuspecAsync`, and `GetMetadataAsync` — not only the primary download endpoint. Never serve any package artifact if its integrity cannot be confirmed.
+- Package identities returned by `IPackageStore.ListAllAsync` are always lowercased (the file system stores them normalised via `ToLowerInvariant()`). Statistics lookups using these identities must use the same normalisation to avoid false "never downloaded" results.
 
 ## 10. Commit and PR Standards
 
@@ -201,6 +202,12 @@ If you notice a gap in these instructions during a session:
 - Apply schema migrations in the **production initialization path**, not only in test setup. Tests must not be the only code that creates schema objects; the production `OpenAsync` / startup path must call `ApplyAsync` (or equivalent) before the database is used.
 - Never share a single `SqliteConnection` instance across concurrent callers; use a connection factory (open a new connection per unit of work or use a connection pool).
 - Wrap every locally created `SqliteConnection` in `await using` to ensure it is always disposed.
+
+## 13. Background Services
+
+- In `BackgroundService.ExecuteAsync`, always catch `OperationCanceledException` from `Task.Delay` separately and return cleanly — do not let it propagate as an unhandled fault.
+- Wrap each scheduler iteration in a `try/catch (Exception)` that logs the error, so one transient failure does not permanently stop the background loop.
+- Configuration options classes that hold `TimeSpan` values must validate that all values are `> TimeSpan.Zero` at `init` time (not later at runtime where the error context is lost). Use a private backing field and a `ValidatePositive` helper in the `init` setter.
 
 ---
 

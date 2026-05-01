@@ -297,6 +297,74 @@ public sealed class FileSystemPackageStoreTests : IDisposable
         await act.Should().NotThrowAsync();
     }
 
+    // ── ListAllAsync ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ListAllAsync_EmptyStore_ReturnsEmptyList()
+    {
+        IReadOnlyList<PackageIdentity> result = await _store.ListAllAsync(CancellationToken.None);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ListAllAsync_SingleStoredPackage_ReturnsIt()
+    {
+        using MemoryStream nupkg = MakeStream("fake-nupkg-content");
+        using MemoryStream nuspec = MakeStream("<package />");
+        await _store.StoreAsync(_identity, nupkg, nuspec, CancellationToken.None);
+
+        IReadOnlyList<PackageIdentity> result = await _store.ListAllAsync(CancellationToken.None);
+
+        result.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task ListAllAsync_StoredPackage_ReturnsLowercasedIdentity()
+    {
+        // Store with mixed-case input; the file system normalises to lowercase.
+        var mixedCaseIdentity = new PackageIdentity("Serilog", "3.1.1");
+        using MemoryStream nupkg = MakeStream("content");
+        using MemoryStream nuspec = MakeStream("<package />");
+        await _store.StoreAsync(mixedCaseIdentity, nupkg, nuspec, CancellationToken.None);
+
+        IReadOnlyList<PackageIdentity> result = await _store.ListAllAsync(CancellationToken.None);
+
+        PackageIdentity identity = result.Should().ContainSingle().Which;
+        identity.Id.Should().Be("serilog");
+        identity.Version.Should().Be("3.1.1");
+    }
+
+    [Fact]
+    public async Task ListAllAsync_MultipleStoredPackages_ReturnsAll()
+    {
+        var second = new PackageIdentity("Newtonsoft.Json", "13.0.3");
+
+        using MemoryStream nupkg1 = MakeStream("content1");
+        using MemoryStream nuspec1 = MakeStream("<package />");
+        await _store.StoreAsync(_identity, nupkg1, nuspec1, CancellationToken.None);
+
+        using MemoryStream nupkg2 = MakeStream("content2");
+        using MemoryStream nuspec2 = MakeStream("<package />");
+        await _store.StoreAsync(second, nupkg2, nuspec2, CancellationToken.None);
+
+        IReadOnlyList<PackageIdentity> result = await _store.ListAllAsync(CancellationToken.None);
+
+        result.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task ListAllAsync_IncompleteFolderWithoutNupkg_IsIgnored()
+    {
+        // Create a version directory but do not place any .nupkg file inside.
+        string incompleteDir = Path.Combine(_tempDir, "orphanlib", "1.0.0");
+        Directory.CreateDirectory(incompleteDir);
+
+        IReadOnlyList<PackageIdentity> result = await _store.ListAllAsync(CancellationToken.None);
+
+        result.Should().BeEmpty();
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     /// <summary>Wraps a stream and reports <c>CanSeek = false</c>.</summary>
