@@ -14,4 +14,5 @@ public interface IPackageStore
     Task<PackageStoreResult> StoreAsync(PackageIdentity identity, Stream nupkg, Stream nuspec, CancellationToken cancellationToken);
     Task<bool> ExistsAsync(PackageIdentity identity, CancellationToken cancellationToken);
     Task DeleteAsync(PackageIdentity identity, CancellationToken cancellationToken);
+    Task<IReadOnlyList<PackageIdentity>> ListAllAsync(CancellationToken cancellationToken);
 }
