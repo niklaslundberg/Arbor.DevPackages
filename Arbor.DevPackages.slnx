@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Arbor.DevPackages.AppHost/Arbor.DevPackages.AppHost.csproj" />
+    <Project Path="src/Arbor.DevPackages.Core.Tests/Arbor.DevPackages.Core.Tests.csproj" />
+    <Project Path="src/Arbor.DevPackages.Core/Arbor.DevPackages.Core.csproj" />
+    <Project Path="src/Arbor.DevPackages.Server.Tests/Arbor.DevPackages.Server.Tests.csproj" />
+    <Project Path="src/Arbor.DevPackages.Server/Arbor.DevPackages.Server.csproj" />
+    <Project Path="src/Arbor.DevPackages.ServiceDefaults/Arbor.DevPackages.ServiceDefaults.csproj" />
+    <Project Path="src/Arbor.DevPackages.Storage.Sqlite.Tests/Arbor.DevPackages.Storage.Sqlite.Tests.csproj" />
+    <Project Path="src/Arbor.DevPackages.Storage.Sqlite/Arbor.DevPackages.Storage.Sqlite.csproj" />
+  </Folder>
+</Solution>
