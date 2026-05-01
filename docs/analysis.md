@@ -210,7 +210,7 @@ The minimum viable set of endpoints for `dotnet restore` and Visual Studio to wo
 - **SQLite table**: Persistent, queryable, minor write overhead per download.
 - **External sink (OpenTelemetry, InfluxDB)**: Powerful but heavy.
 
-**Recommended:** SQLite with a configurable flush interval. Keep the schema minimal: `(package_id, version, feed_id, downloaded_at)`. Expose a simple `/stats` endpoint for insights.
+**Decision:** SQLite with a `download_events` table. Schema: `(id, package_id, version, downloaded_at)`. The aggregated count and latest timestamp per package are derived by query. Each download event is written synchronously inside the request pipeline. See [section 11.6](#116-stats-schema-evolution) for the resolved schema.
 
 ### 5.6 Configuration
 
@@ -250,9 +250,10 @@ Each feed should expose a `allow-prerelease` flag. The proxy layer respects this
 
 ### 6.4 TLS
 
-- Serve over HTTPS by default in production mode.
-- Use ASP.NET Core's built-in Kestrel TLS with a developer certificate for local use.
-- Never downgrade TLS below 1.2.
+- **Initial implementation uses HTTP only** — this server targets local developer machines and is not a shared server.
+- HTTPS will be added in a later iteration using ASP.NET Core Kestrel with a developer certificate.
+- Never downgrade TLS below 1.2 when HTTPS is introduced.
+- The `SslProtocols.None`, `SslProtocols.Ssl3`, and `SslProtocols.Tls` (TLS 1.0) values must never be used.
 
 ### 6.5 Dependency supply chain
 
@@ -333,14 +334,58 @@ Before finalising the design, review the following:
 
 ---
 
-## 11. Open Questions
+## 11. Open Questions — Resolved
 
-1. **Retention policy semantics**: Should purge be triggered by age, by download count threshold, or by combined score? What happens when a project still references a purged package — should the server warn?
-2. **Feed isolation**: Should packages downloaded via one feed be re-served by another feed on the same server, or is each feed a completely isolated namespace?
-3. **Upstream authentication**: How should credentials for private upstream feeds be supplied without storing them in config files?
-4. **Search index freshness**: How often should upstream search results be cached, and should the cache be invalidated on a schedule or on demand?
-5. **Concurrency of retention**: Should purge jobs run during normal operation or only in maintenance windows?
-6. **Stats schema evolution**: What minimal schema supports retention decisions now without locking us into a design that cannot be extended later?
+The following questions were raised during analysis and have been answered by the project owner.
+
+### 11.1 Retention policy semantics
+
+**Question:** Should purge be triggered by age, by download count threshold, or by combined score? What happens when a project still references a purged package — should the server warn?
+
+**Decision:** Age-based only for now, open for extension later. A package is removed if it has **not been downloaded in the last 30 days**. It is expected that packages can always be re-fetched from upstream or recreated if needed. No explicit warning when a purged package is requested — the server will transparently re-fetch it from upstream (or return 404 if offline and not cached).
+
+The retention rule is encoded as: `last_downloaded_at < NOW() - 30 days`.
+
+### 11.2 Feed isolation
+
+**Question:** Should packages downloaded via one feed be re-served by another feed on the same server, or is each feed a completely isolated namespace?
+
+**Decision:** **No isolation.** All feeds share the same local package store. Packages are immutable — once stored, the same `.nupkg` file is served regardless of which feed URL was used to request it. Feed identity affects routing and configuration (e.g. upstream URL, pre-release flag) but not storage namespacing.
+
+### 11.3 Upstream authentication
+
+**Question:** How should credentials for private upstream feeds be supplied without storing them in config files?
+
+**Decision:** **Start without authentication.** The upstream feeds currently in use are public and unauthenticated. The `IUpstreamCredentialProvider` interface (described in `security-review.md`) will be defined but its no-op implementation will be the only one shipped initially. Private-feed authentication is deferred to a later iteration.
+
+### 11.4 Search index freshness
+
+**Question:** How often should upstream search results be cached, and should the cache be invalidated on a schedule or on demand?
+
+**Decision:** Upstream search results are cached in memory and refreshed by a **background job every 30 minutes**. An on-demand cache-bust endpoint (`POST /api/feeds/{feedId}/search-cache/refresh`) will also be provided to allow immediate refreshes during development. The background refresh uses `IHostedService` with a periodic timer.
+
+### 11.5 Concurrency of retention
+
+**Question:** Should purge jobs run during normal operation or only in maintenance windows?
+
+**Decision:** Purge jobs **can run at any time** but must wait until at least **5 minutes have elapsed since the last package download** on any feed. This avoids purging packages that are actively being consumed. The retention scheduler checks the `last_downloaded_at` timestamp across all packages before initiating a purge run.
+
+### 11.6 Stats schema evolution
+
+**Question:** What minimal schema supports retention decisions now without locking us into a design that cannot be extended later?
+
+**Decision:** Keep the schema minimal. The `download_events` table stores one row per download event:
+
+```sql
+CREATE TABLE download_events (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    package_id      TEXT    NOT NULL,
+    version         TEXT    NOT NULL,
+    downloaded_at   TEXT    NOT NULL  -- ISO 8601 UTC
+);
+```
+
+The **latest** `downloaded_at` per `(package_id, version)` is all that is needed for the 30-day retention rule. Aggregated counts (total downloads) are derived via `COUNT(*)` queries on this table. No additional schema is needed initially; columns can be added (e.g. `feed_id`, `client_ip`) without breaking existing queries.
 
 ---
 

@@ -2,7 +2,7 @@
 
 A local NuGet package server for excellent local package management and offline developer workflows.
 
-> **Status:** Pre-implementation — see [`docs/analysis.md`](docs/analysis.md) for the full analysis, design decisions, and trade-offs before any code is written.
+> **Status:** Pre-implementation — see [`docs/analysis.md`](docs/analysis.md) for the full analysis and [`docs/plan.md`](docs/plan.md) for the iterative implementation plan.
 
 ## Goals
 
@@ -26,7 +26,8 @@ A local NuGet package server for excellent local package management and offline 
 
 | Document | Purpose |
 |---|---|
-| [`docs/analysis.md`](docs/analysis.md) | Pre-implementation analysis: pros/cons, trade-offs, design decisions, open questions |
+| [`docs/analysis.md`](docs/analysis.md) | Pre-implementation analysis: pros/cons, trade-offs, design decisions, resolved open questions |
+| [`docs/plan.md`](docs/plan.md) | Iterative TDD implementation plan — 12 iterations from scaffold to HTTPS |
 
 ## Inspiration
 
