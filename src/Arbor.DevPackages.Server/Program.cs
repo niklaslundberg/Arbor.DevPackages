@@ -1,6 +1,7 @@
 using Arbor.DevPackages.Core.Packages;
 using Arbor.DevPackages.Core.Statistics;
 using Arbor.DevPackages.Server.FlatContainer;
+using Arbor.DevPackages.Server.Registration;
 using Arbor.DevPackages.Server.ServiceIndex;
 using Arbor.DevPackages.ServiceDefaults;
 
@@ -19,6 +20,7 @@ var app = builder.Build();
 app.MapDefaultEndpoints();
 app.MapServiceIndex();
 app.MapFlatContainer();
+app.MapRegistration();
 
 app.Run();
 
