@@ -741,6 +741,8 @@ Each iteration follows this exact sequence:
 - System tests in `Arbor.DevPackages.SystemTests` spin up a real server process and invoke `dotnet restore` as a subprocess. They are the final safety net: they are always run last and are the authoritative proof that the system works end-to-end.
 - Online system tests (Scenario 1) are tagged `[Trait("Category", "SystemTest_Online")]` and may be skipped in air-gapped environments.
 - The CI pipeline must be green after every committed iteration.
+- **Coverage goal:** 100% line and branch coverage. Deviations are allowed only for genuinely unreachable code paths; mark each with `// coverage: unreachable`.
+- **Coverage threshold:** 80% line coverage — the CI build fails if coverage drops below this. Enforced via `coverlet.collector` and `dotnet test` threshold arguments.
 
 ---
 
@@ -779,6 +781,8 @@ An iteration is complete when:
 
 - [ ] All tests written in this iteration pass.
 - [ ] All pre-existing tests still pass.
+- [ ] Line coverage is ≥ 80% (CI threshold enforced via `coverlet.collector`).
+- [ ] Every deviation from 100% coverage is documented with `// coverage: unreachable`.
 - [ ] `dotnet build` produces zero warnings.
 - [ ] `dotnet list package --vulnerable --include-transitive` reports no findings.
 - [ ] The CI pipeline is green.
