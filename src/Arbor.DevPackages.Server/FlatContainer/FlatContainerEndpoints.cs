@@ -64,7 +64,9 @@ public static class FlatContainerEndpoints
         var etag = metadata.Sha512Hash;
         var quotedEtag = $"\"{etag}\"";
 
-        if (context.Request.Headers.IfNoneMatch.Contains(quotedEtag))
+        var ifNoneMatch = context.Request.GetTypedHeaders().IfNoneMatch;
+        if (ifNoneMatch is { Count: > 0 } &&
+            ifNoneMatch.Any(e => string.Equals(e.Tag.Value, quotedEtag, StringComparison.Ordinal)))
         {
             return Results.StatusCode(304);
         }
@@ -72,7 +74,10 @@ public static class FlatContainerEndpoints
         var stream = await store.OpenNupkgAsync(identity, cancellationToken);
         if (stream is null)
         {
-            return Results.NotFound();
+            // Metadata existed but .nupkg is missing — integrity violation.
+            return Results.Problem(
+                detail: $"Package {id} {version} metadata found but .nupkg is missing.",
+                statusCode: StatusCodes.Status500InternalServerError);
         }
 
         await statistics.RecordDownloadAsync(
