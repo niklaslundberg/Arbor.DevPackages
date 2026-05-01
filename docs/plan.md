@@ -610,96 +610,98 @@ GetStats_WithNoDownloads_ReturnsEmptyArray
 
 ## Iteration 13 — System tests (end-to-end)
 
-**Goal:** Verify the real, fully-assembled application from the outside — a real NuGet client performing `dotnet restore` against a running server instance, using no fakes or test doubles for the HTTP or storage layers. These differ from the integration tests in earlier iterations (which substitute fakes via `WebApplicationFactory`) by spinning up `Arbor.DevPackages.Server` as a real process on a real port and invoking `dotnet restore` as a subprocess.
+**Goal:** Verify the real, fully-assembled application from the outside with zero fakes, mocks, or test doubles of any kind. A real `dotnet restore` subprocess runs against a real server process using only production code and production configuration. Nothing is substituted, intercepted, or simulated.
 
 ### Why system tests are different
 
 | | Integration tests (`*.Server.Tests`) | System tests (`*.SystemTests`) |
 |---|---|---|
 | Server | `WebApplicationFactory` (in-process) | Real `dotnet run` process on a free TCP port |
+| Upstream | WireMock / fake `HttpMessageHandler` | Real nuget.org (Scenario 1) or a genuinely unreachable URL — nothing listening on that port (Scenario 2) |
 | Storage | Temp directory, real filesystem | Temp directory, real filesystem |
-| Upstream | WireMock / fake `HttpMessageHandler` | Real nuget.org (scenario 1) or WireMock (scenario 2) |
 | NuGet client | `NuGet.Protocol` in-process | `dotnet restore` subprocess with custom `nuget.config` |
+| Fakes / mocks | Allowed | **None — production code only** |
 | Scope | Endpoint behaviour | Full round-trip including NuGet client protocol quirks |
+
+**The key constraint for system tests:** no WireMock, no fake `HttpMessageHandler`, no in-memory substitutes. If a real upstream is not supposed to be called, the test ensures the server does not need to call it (because the package is already in the local store) — not by intercepting the call.
 
 ### New project
 
-`Arbor.DevPackages.SystemTests` — references only `Arbor.DevPackages.Testing`; never references `Arbor.DevPackages.Core`, `Storage.Sqlite`, or `Server` directly (to keep the boundary honest).
+`Arbor.DevPackages.SystemTests` — no reference to `Arbor.DevPackages.Core`, `Storage.Sqlite`, or `Server`. The project boundary is enforced: the only way to interact with the server is over HTTP on a real socket.
 
 ### Test infrastructure (shared helpers in `Arbor.DevPackages.SystemTests`)
 
 - `ServerFixture` — xUnit `IAsyncLifetime` class:
   1. Picks a free TCP port.
-  2. Writes a temporary `appsettings.json` configuring one feed (`nuget-org`) pointing at the upstream URL for the current scenario.
-  3. Writes a temporary package store directory.
-  4. Starts `Arbor.DevPackages.Server` as a `Process` (`dotnet run` or the published binary).
+  2. Writes a temporary `appsettings.json` configuring one feed (`nuget-org`) with the upstream URL appropriate to the scenario (real nuget.org or a dead localhost URL).
+  3. Writes a temporary package store directory and, if needed, pre-seeds it with committed test assets.
+  4. Starts `Arbor.DevPackages.Server` as a real `Process` (`dotnet run` or the published binary) using the temp config.
   5. Polls `GET /health` until the server responds `200 Healthy` (max 30 s timeout).
-  6. Exposes `BaseAddress` for use in tests.
+  6. Exposes `BaseAddress` and the store directory path for use in tests.
   7. On `DisposeAsync`: kills the process and deletes temp directories.
 
-- `NuGetClientFixture` — helper that:
-  1. Creates a temporary directory acting as the NuGet global packages cache (isolated per test run; `NUGET_PACKAGES` env var).
-  2. Writes a `nuget.config` that declares **only** `http://localhost:{port}/feeds/nuget-org/v3/index.json` as the package source (no fallback to nuget.org directly).
-  3. Creates a minimal `.csproj` with a single `<PackageReference>` to the probe package (`Serilog` at a pinned version).
-  4. Runs `dotnet restore {project}` as a subprocess and captures stdout, stderr, and exit code.
-
-- `WireMockUpstream` — thin wrapper around `WireMock.Net` that serves a minimal NuGet v3 flat-container for the cached-package scenario; configured to return `503 Service Unavailable` for any request not in its known set (simulating an offline upstream).
+- `NuGetRestoreRunner` — helper that:
+  1. Creates a temporary directory as the NuGet global packages cache (isolated per run; sets `NUGET_PACKAGES` env var).
+  2. Writes a `nuget.config` that declares **only** `http://localhost:{port}/feeds/nuget-org/v3/index.json` as the package source (no fallback to nuget.org directly, no other sources).
+  3. Writes a minimal `.csproj` with a single `<PackageReference>` to `Serilog` at the pinned version.
+  4. Runs `dotnet restore {project}` as a subprocess, captures stdout, stderr, exit code, and wall-clock duration.
 
 ### Scenario 1 — Passthrough to real nuget.org
 
 **Name:** `Restore_ViaProxy_WhenPackageNotCached_FetchesFromUpstreamAndSucceeds`
 
-**Steps:**
-1. Start `ServerFixture` with upstream = `https://api.nuget.org/v3/index.json`.
-2. Create `NuGetClientFixture` with `nuget.config` pointing exclusively at the local server.
-3. Ensure the local package store is empty (fresh temp dir).
-4. Run `dotnet restore` for the probe project referencing `Serilog 4.x` (latest stable pinned).
-5. Assert: exit code `0`.
-6. Assert: `Serilog.{version}.nupkg` exists in the temp global packages cache.
-7. Assert: the server's local store directory contains the fetched `.nupkg` and `.sha512` sidecar.
-
-**Why Serilog:** well-known, stable, MIT-licensed, small download; if it restores correctly the proxy works end-to-end.
-
-**Network note:** this test requires outbound internet access. Mark it with a custom `[Trait("Category", "SystemTest_Online")]` trait so it can be skipped in air-gapped CI environments.
-
-### Scenario 2 — Cached package, upstream unavailable
-
-**Name:** `Restore_ViaProxy_WhenPackageCachedAndUpstreamDown_SucceedsWithoutCallingUpstream`
+**Setup:** `ServerFixture` configured with upstream = `https://api.nuget.org/v3/index.json`; empty local store.
 
 **Steps:**
-1. Pre-seed the local package store with `Serilog {version}.nupkg`, `.nuspec`, and `.sha512` (copy from a bundled test asset or download once into the repo's `testdata/` directory and commit).
-2. Start `ServerFixture` with upstream = `http://localhost:{wireMockPort}` (a `WireMockUpstream` configured to refuse all connections / return `503`).
-3. Create `NuGetClientFixture` with a fresh NuGet global packages cache (so the client must actually contact the server).
-4. Run `dotnet restore` for the same probe project.
-5. Assert: exit code `0`.
-6. Assert: `dotnet restore` wall-clock time < 5 seconds (no network round-trips to a real upstream).
-7. Assert: WireMock received zero requests (server served from local store without contacting upstream).
+1. Run `dotnet restore` via `NuGetRestoreRunner`.
+2. Assert: exit code `0`.
+3. Assert: `serilog.{version}.nupkg` exists in the temp NuGet global packages cache.
+4. Assert: the server's local store directory contains the fetched `.nupkg` and `.sha512` sidecar — confirming the server cached the package locally after proxying it.
 
-**Why the timing assertion:** distinguishes "cached path" from "upstream timed out after 30 s then fell back to cache". If the implementation is correct the server returns the cached bytes immediately without attempting the upstream at all.
+**Why Serilog:** well-known, stable, MIT-licensed, small download, no unusual dependencies; if it restores correctly the full proxy pipeline works end-to-end.
+
+**Network note:** this test requires outbound internet access. Tag it `[Trait("Category", "SystemTest_Online")]` so it can be excluded in air-gapped CI.
+
+### Scenario 2 — Cached package, upstream unreachable
+
+**Name:** `Restore_ViaProxy_WhenPackageCachedAndUpstreamUnreachable_SucceedsWithoutCallingUpstream`
+
+**Setup:** `ServerFixture` configured with upstream = `http://localhost:{unusedPort}` (a port on which nothing is listening — a genuine connection refusal, not a mock). The server's local store is pre-seeded with the committed test assets before the server process starts.
+
+**Steps:**
+1. `ServerFixture` copies `testdata/serilog/` into the temp store directory before starting the server.
+2. Run `dotnet restore` via `NuGetRestoreRunner` with a fresh NuGet global packages cache (so the client must contact the server).
+3. Assert: exit code `0`.
+4. Assert: wall-clock duration of `dotnet restore` < 5 seconds (no connection timeouts to a dead upstream).
+
+**Why the timing assertion:** distinguishes "server served the cached package immediately" from "server attempted upstream, waited for TCP timeout (~20 s), then fell back to the local store". Correct behaviour means the server never attempts to open a connection to the upstream at all when the package is already in the local store.
+
+**Why no WireMock here:** the upstream is genuinely unreachable (port with nothing listening). If the server incorrectly attempts to contact it, `dotnet restore` will either time out (failing the timing assertion) or fail outright (failing the exit-code assertion). No interception is needed.
+
+### Test assets
+
+`testdata/serilog/` — committed directory containing:
+- `serilog.{version}.nupkg`
+- `serilog.{version}.nuspec`
+- `serilog.{version}.nupkg.sha512`
+
+The pinned version must match the `<PackageReference>` version used in `NuGetRestoreRunner`'s probe project. Download the asset once and commit it; it never changes (packages on nuget.org are immutable).
 
 ### Tests to write (in `Arbor.DevPackages.SystemTests`)
 
 ```
 Restore_ViaProxy_WhenPackageNotCached_FetchesFromUpstreamAndSucceeds
-Restore_ViaProxy_WhenPackageCachedAndUpstreamDown_SucceedsWithoutCallingUpstream
+Restore_ViaProxy_WhenPackageCachedAndUpstreamUnreachable_SucceedsWithoutCallingUpstream
 ```
 
 ### TDD steps
 
-1. Write `Restore_ViaProxy_WhenPackageCachedAndUpstreamDown_SucceedsWithoutCallingUpstream` first (no network dependency) → fails (server does not exist yet) → implement the full server → passes.
-2. Write `Restore_ViaProxy_WhenPackageNotCached_FetchesFromUpstreamAndSucceeds` (requires network) → passes when upstream proxy (Iteration 8) is wired up.
+1. Write `Restore_ViaProxy_WhenPackageCachedAndUpstreamUnreachable_SucceedsWithoutCallingUpstream` first (no outbound internet required) → fails (server does not exist yet) → implement the full server → passes.
+2. Write `Restore_ViaProxy_WhenPackageNotCached_FetchesFromUpstreamAndSucceeds` (requires network) → passes when the upstream proxy (Iteration 8) is wired up.
 
-### Dependencies to add
+### No new dependencies for this iteration
 
-| Package | Version | License | Used in |
-|---|---|---|---|
-| `WireMock.Net` | latest stable | Apache 2.0 | `SystemTests` |
-
-`WireMock.Net` is MIT-compatible (Apache 2.0). Add to `Directory.Packages.props` and `THIRD_PARTY_NOTICES.md`.
-
-### Test assets
-
-- `testdata/serilog/` — committed directory containing `serilog.{version}.nupkg`, `serilog.{version}.nuspec`, and `serilog.{version}.sha512` for use as the pre-seeded local store in Scenario 2. The exact version must match the `<PackageReference>` in `NuGetClientFixture`'s probe project.
+System tests require no additional NuGet packages beyond those already planned (xUnit, AwesomeAssertions). No WireMock or other mocking libraries are used here; those belong exclusively to integration tests.
 
 ---
 
@@ -766,7 +768,7 @@ Planned third-party dependencies:
 | `xunit.runner.visualstudio` | 2.x | Apache 2.0 | Testing |
 | `AwesomeAssertions` | 1.x | MIT | Testing |
 | `Microsoft.AspNetCore.Mvc.Testing` | 10.x | MIT | Integration tests |
-| `WireMock.Net` | latest stable | Apache 2.0 | System tests |
+| `WireMock.Net` | latest stable | Apache 2.0 | Integration tests |
 | `coverlet.collector` | 6.x | MIT | Code coverage |
 
 ---
