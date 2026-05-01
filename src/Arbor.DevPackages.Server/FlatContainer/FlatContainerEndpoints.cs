@@ -1,9 +1,12 @@
 using System.Text;
 using System.Text.Json.Serialization;
+using Arbor.DevPackages.Core.Feeds;
 using Arbor.DevPackages.Core.Packages;
+using Arbor.DevPackages.Core.Proxy;
 using Arbor.DevPackages.Core.Statistics;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Arbor.DevPackages.Server.FlatContainer;
 
@@ -56,13 +59,58 @@ public static class FlatContainerEndpoints
 
         var identity = new PackageIdentity(id, version);
 
-        // GetStoredHashAsync is a cheap read (no hash re-computation) used only for ETag.
+        // Step 1: Check local store.
         var storedHash = await store.GetStoredHashAsync(identity, cancellationToken);
+
         if (storedHash is null)
         {
-            return Results.NotFound();
+            // Resolve optional proxy services from DI (null if not configured).
+            var probe = context.RequestServices.GetService<IConnectivityProbe>();
+            var upstreamProxy = context.RequestServices.GetService<IUpstreamProxy>();
+            var feed = context.RequestServices.GetService<FeedConfiguration>();
+
+            // Step 2: If proxy services are not configured, fall back to 404.
+            if (probe is null || upstreamProxy is null || feed is null)
+            {
+                return Results.NotFound();
+            }
+
+            bool reachable = await probe.IsReachableAsync(feed, cancellationToken);
+            if (!reachable)
+            {
+                return Results.NotFound();
+            }
+
+            // Step 3: Fetch from upstream and store locally.
+            PackageMetadata? fetched;
+            try
+            {
+                fetched = await upstreamProxy.FetchAndStoreAsync(identity, feed, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Step 5: Fetch failed — mark upstream offline and return 502.
+                await probe.RecordFailureAsync(feed, cancellationToken);
+                return Results.StatusCode(StatusCodes.Status502BadGateway);
+            }
+
+            if (fetched is null)
+            {
+                // Package does not exist on the upstream feed.
+                return Results.NotFound();
+            }
+
+            // Step 4: Package was stored — re-read the stored hash from the local store.
+            storedHash = await store.GetStoredHashAsync(identity, cancellationToken);
+            if (storedHash is null)
+            {
+                return Results.Problem(
+                    detail: $"Package {identity.Id} {identity.Version} was fetched from upstream but could not be read back from the store.",
+                    statusCode: StatusCodes.Status500InternalServerError);
+            }
         }
 
+        // GetStoredHashAsync is a cheap read (no hash re-computation) used only for ETag.
         var quotedEtag = $"\"{storedHash}\"";
 
         var ifNoneMatch = context.Request.GetTypedHeaders().IfNoneMatch;
@@ -121,3 +169,5 @@ public static class FlatContainerEndpoints
 
 internal sealed record VersionListResponse(
     [property: JsonPropertyName("versions")] string[] Versions);
+
+
