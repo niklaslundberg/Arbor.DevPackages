@@ -3,6 +3,7 @@
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="NuGet.Versioning" />
     <ProjectReference Include="..\Arbor.DevPackages.Core\Arbor.DevPackages.Core.csproj" />
     <ProjectReference Include="..\Arbor.DevPackages.ServiceDefaults\Arbor.DevPackages.ServiceDefaults.csproj" />
   </ItemGroup>

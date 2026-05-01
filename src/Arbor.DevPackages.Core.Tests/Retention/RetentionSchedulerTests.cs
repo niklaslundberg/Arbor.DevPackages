@@ -110,6 +110,9 @@ public sealed class RetentionSchedulerTests
         public Task<PackageStoreResult> StoreAsync(PackageIdentity identity, Stream nupkg, Stream nuspec, CancellationToken cancellationToken)
             => Task.FromResult(PackageStoreResult.Stored);
 
+        public Task<string?> GetStoredHashAsync(PackageIdentity identity, CancellationToken cancellationToken)
+            => Task.FromResult<string?>(null);
+
         public Task<bool> ExistsAsync(PackageIdentity identity, CancellationToken cancellationToken)
             => Task.FromResult(_packages.Contains(identity));
     }

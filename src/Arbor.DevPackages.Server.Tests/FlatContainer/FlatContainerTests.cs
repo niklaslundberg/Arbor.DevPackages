@@ -1,12 +1,22 @@
 using System.Net;
 using System.Text;
+using System.IO.Compression;
 using System.Text.Json;
 using Arbor.DevPackages.Core.Packages;
 using Arbor.DevPackages.Core.Statistics;
+using Arbor.DevPackages.Server.FlatContainer;
+using Arbor.DevPackages.Server.ServiceIndex;
 using Arbor.DevPackages.Testing;
 using AwesomeAssertions;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using NuGet.Common;
+using NuGet.Configuration;
+using NuGet.Protocol;
+using NuGet.Protocol.Core.Types;
+using NuGet.Versioning;
 using Xunit;
 
 namespace Arbor.DevPackages.Server.Tests.FlatContainer;
@@ -31,10 +41,10 @@ public sealed class FlatContainerTests : IClassFixture<WebApplicationFactory<Pro
 
     private WebApplicationFactory<Program> BuildFactory(
         InMemoryPackageStore? store = null,
-        NoOpStatisticsCollector? collector = null)
+        RecordingStatisticsCollector? collector = null)
     {
         var packageStore = store ?? new InMemoryPackageStore();
-        var statsCollector = collector ?? new NoOpStatisticsCollector();
+        var statsCollector = collector ?? new RecordingStatisticsCollector();
 
         return _factory.WithWebHostBuilder(b =>
             b.ConfigureServices(services =>
@@ -138,7 +148,7 @@ public sealed class FlatContainerTests : IClassFixture<WebApplicationFactory<Pro
     [Fact]
     public async Task DownloadNupkg_RecordsDownloadStatistic()
     {
-        var collector = new NoOpStatisticsCollector();
+        var collector = new RecordingStatisticsCollector();
         using var factory = BuildFactory(StoreWithTestPackage(), collector);
         var client = factory.CreateClient();
 
@@ -166,5 +176,86 @@ public sealed class FlatContainerTests : IClassFixture<WebApplicationFactory<Pro
 
         var content = await response.Content.ReadAsStringAsync();
         content.Should().Be(TestNuspec);
+    }
+
+    // ─── NuGet.Protocol end-to-end ───────────────────────────────────────────
+
+    /// <summary>
+    /// Creates a minimal valid nupkg (ZIP) byte array containing the nuspec.
+    /// NuGet.Protocol validates that a downloaded package is a valid ZIP archive;
+    /// raw bytes that are not a ZIP would cause <c>CopyNupkgToStreamAsync</c> to return false.
+    /// </summary>
+    private static byte[] CreateMinimalNupkgBytes()
+    {
+        using var ms = new MemoryStream();
+        using (var archive = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var entry = archive.CreateEntry("serilog.3.1.1.nuspec");
+            using var writer = new StreamWriter(entry.Open(), Encoding.UTF8);
+            writer.Write(TestNuspec);
+        }
+
+        return ms.ToArray();
+    }
+
+    [Fact]
+    public async Task DownloadNupkg_NuGetProtocolClient_CanListVersionsAndDownloadPackage()
+    {
+        // NuGet.Protocol validates that a downloaded .nupkg is a valid ZIP file,
+        // so we must provide one.
+        var nupkgBytes = CreateMinimalNupkgBytes();
+
+        var store = new InMemoryPackageStore();
+        store.Add(TestIdentity, nupkgBytes, TestNuspec);
+        var collector = new RecordingStatisticsCollector();
+
+        // Start a real Kestrel server so NuGet.Protocol uses its own HTTP stack.
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseUrls("http://127.0.0.1:0");
+        Arbor.DevPackages.ServiceDefaults.Extensions.AddServiceDefaults(builder);
+        builder.Services.AddSingleton<IPackageStore>(store);
+        builder.Services.AddSingleton<IStatisticsCollector>(collector);
+
+        await using var app = builder.Build();
+        Arbor.DevPackages.ServiceDefaults.Extensions.MapDefaultEndpoints(app);
+        ServiceIndexEndpoints.MapServiceIndex(app);
+        FlatContainerEndpoints.MapFlatContainer(app);
+
+        await app.StartAsync();
+
+        try
+        {
+            var indexUrl = app.Urls.FirstOrDefault() is { } url
+                ? $"{url}/v3/index.json"
+                : throw new InvalidOperationException("The test server did not bind to any address.");
+
+            var source = new PackageSource(indexUrl);
+            var repository = Repository.Factory.GetCoreV3(source);
+
+            using var cache = new SourceCacheContext { NoCache = true };
+            var resource = await repository.GetResourceAsync<FindPackageByIdResource>(CancellationToken.None);
+
+            // Verify the version list endpoint.
+            var versions = await resource.GetAllVersionsAsync(
+                "serilog", cache, NullLogger.Instance, CancellationToken.None);
+
+            versions.Should().ContainSingle(v => v == new NuGetVersion("3.1.1"));
+
+            // Verify the nupkg download endpoint.
+            using var ms = new MemoryStream();
+            var downloaded = await resource.CopyNupkgToStreamAsync(
+                "serilog", new NuGetVersion("3.1.1"), ms, cache, NullLogger.Instance, CancellationToken.None);
+
+            downloaded.Should().BeTrue();
+            ms.ToArray().Should().BeEquivalentTo(nupkgBytes);
+
+            // Verify that a download event was recorded.
+            collector.RecordedEvents.Should().ContainSingle(
+                e => e.Identity.Id == "serilog" && e.Identity.Version == "3.1.1");
+        }
+        finally
+        {
+            await app.StopAsync();
+        }
     }
 }

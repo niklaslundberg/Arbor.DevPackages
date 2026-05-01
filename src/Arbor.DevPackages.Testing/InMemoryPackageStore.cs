@@ -22,11 +22,13 @@ public sealed class InMemoryPackageStore : IPackageStore
         ArgumentNullException.ThrowIfNull(nupkg);
         ArgumentNullException.ThrowIfNull(nuspec);
 
-        string sha512 = ComputeSha512(nupkg);
+        // Copy the array so caller mutations cannot corrupt the stored content.
+        byte[] stored = (byte[])nupkg.Clone();
+        string sha512 = ComputeSha512(stored);
         var key = new PackageIdentity(
             identity.Id.ToLowerInvariant(),
             identity.Version.ToLowerInvariant());
-        _packages[key] = new StoredPackage(nupkg, nuspec, sha512);
+        _packages[key] = new StoredPackage(stored, nuspec, sha512);
     }
 
     public Task<PackageMetadata?> GetMetadataAsync(PackageIdentity identity, CancellationToken cancellationToken)
@@ -41,12 +43,24 @@ public sealed class InMemoryPackageStore : IPackageStore
         return Task.FromResult<PackageMetadata?>(null);
     }
 
+    public Task<string?> GetStoredHashAsync(PackageIdentity identity, CancellationToken cancellationToken)
+    {
+        var key = Normalise(identity);
+        if (_packages.TryGetValue(key, out var pkg))
+        {
+            return Task.FromResult<string?>(pkg.Sha512Hash);
+        }
+
+        return Task.FromResult<string?>(null);
+    }
+
     public Task<Stream?> OpenNupkgAsync(PackageIdentity identity, CancellationToken cancellationToken)
     {
         var key = Normalise(identity);
         if (_packages.TryGetValue(key, out var pkg))
         {
-            return Task.FromResult<Stream?>(new MemoryStream(pkg.Nupkg));
+            // Return a read-only stream so callers cannot mutate the stored bytes.
+            return Task.FromResult<Stream?>(new MemoryStream(pkg.Nupkg, writable: false));
         }
 
         return Task.FromResult<Stream?>(null);
