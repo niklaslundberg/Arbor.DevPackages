@@ -1,4 +1,6 @@
 using AwesomeAssertions;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using NuGet.Configuration;
 using NuGet.Protocol;
@@ -39,6 +41,7 @@ public sealed class ServiceIndexTests : IClassFixture<WebApplicationFactory<Prog
     public async Task GetServiceIndex_ResourceIds_ContainRequestHost()
     {
         var client = _factory.CreateClient();
+        var expectedHost = client.BaseAddress!.Host;
 
         var response = await client.GetAsync("/v3/index.json");
 
@@ -49,7 +52,7 @@ public sealed class ServiceIndexTests : IClassFixture<WebApplicationFactory<Prog
         foreach (var resource in resources.EnumerateArray())
         {
             var id = resource.GetProperty("@id").GetString();
-            id.Should().Contain("localhost");
+            id.Should().Contain(expectedHost);
         }
     }
 
