@@ -11,7 +11,7 @@ builder.AddServiceDefaults();
 var storePath = builder.Configuration["PackageStorePath"]
     ?? Path.Combine(Path.GetTempPath(), "Arbor.DevPackages", "store");
 
-builder.Services.AddSingleton<IPackageStore>(new FileSystemPackageStore(storePath));
+builder.Services.AddSingleton<IPackageStore>(_ => new FileSystemPackageStore(storePath));
 builder.Services.AddSingleton<IStatisticsCollector, NoOpProductionStatisticsCollector>();
 
 var app = builder.Build();

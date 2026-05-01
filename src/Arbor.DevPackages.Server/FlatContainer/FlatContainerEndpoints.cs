@@ -66,7 +66,8 @@ public static class FlatContainerEndpoints
 
         var ifNoneMatch = context.Request.GetTypedHeaders().IfNoneMatch;
         if (ifNoneMatch is { Count: > 0 } &&
-            ifNoneMatch.Any(e => string.Equals(e.Tag.Value, quotedEtag, StringComparison.Ordinal)))
+            ifNoneMatch.Any(e => e.Tag.HasValue &&
+                string.Equals(e.Tag.Value, quotedEtag, StringComparison.Ordinal)))
         {
             return Results.StatusCode(304);
         }
