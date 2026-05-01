@@ -78,7 +78,9 @@ public sealed class ServiceIndexTests : IClassFixture<WebApplicationFactory<Prog
 
         await app.StartAsync();
 
-        var indexUrl = $"{app.Urls.First()}/v3/index.json";
+        var indexUrl = app.Urls.FirstOrDefault() is { } url
+            ? $"{url}/v3/index.json"
+            : throw new InvalidOperationException("The test server did not bind to any address.");
 
         var source = new PackageSource(indexUrl);
         var repository = Repository.Factory.GetCoreV3(source);
