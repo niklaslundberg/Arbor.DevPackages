@@ -105,4 +105,20 @@ public sealed class SqliteStatisticsTests : IAsyncLifetime
         DateTimeOffset? result = await _reader.GetLastDownloadedAtAcrossAllPackagesAsync(CancellationToken.None);
         result.Should().Be(later);
     }
+
+    [Fact]
+    public async Task GetLastDownloadedAt_WithDifferentOffsets_ReturnsLatestUtcInstant()
+    {
+        var identity = new PackageIdentity("Newtonsoft.Json", "13.0.3");
+        // 08:00+02:00 = 06:00 UTC — earlier UTC instant but larger offset string
+        var earlierUtc = new DateTimeOffset(2026, 4, 29, 8, 0, 0, TimeSpan.FromHours(2));
+        // 08:00+01:00 = 07:00 UTC — later UTC instant
+        var laterUtc = new DateTimeOffset(2026, 4, 29, 8, 0, 0, TimeSpan.FromHours(1));
+
+        await _collector.RecordDownloadAsync(new DownloadEvent(identity, earlierUtc), CancellationToken.None);
+        await _collector.RecordDownloadAsync(new DownloadEvent(identity, laterUtc), CancellationToken.None);
+
+        DateTimeOffset? result = await _reader.GetLastDownloadedAtAsync(identity, CancellationToken.None);
+        result.Should().Be(laterUtc);
+    }
 }

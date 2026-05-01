@@ -24,7 +24,7 @@ public sealed class SqliteStatisticsCollector : IStatisticsCollector
             """;
         cmd.Parameters.AddWithValue("$packageId", downloadEvent.Identity.Id);
         cmd.Parameters.AddWithValue("$version", downloadEvent.Identity.Version);
-        cmd.Parameters.AddWithValue("$downloadedAt", downloadEvent.DownloadedAt.ToString("o"));
+        cmd.Parameters.AddWithValue("$downloadedAt", downloadEvent.DownloadedAt.UtcDateTime.ToString("O"));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 }

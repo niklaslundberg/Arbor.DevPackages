@@ -65,7 +65,7 @@ public sealed class SqliteStatisticsReader : IStatisticsReader
 
     private static DateTimeOffset ParseTimestamp(string value)
     {
-        if (!DateTimeOffset.TryParse(value, null, DateTimeStyles.RoundtripKind, out DateTimeOffset parsed))
+        if (!DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTimeOffset parsed))
         {
             throw new FormatException($"Stored downloaded_at value '{value}' is not a valid ISO 8601 timestamp.");
         }
