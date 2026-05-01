@@ -106,6 +106,8 @@ builder.Build().Run();
 Arbor.DevPackages.slnx
 Directory.Packages.props
 THIRD_PARTY_NOTICES.md
+testdata/
+  serilog/                            # Pre-seeded .nupkg/.nuspec/.sha512 for system test scenario 2
 src/
   Arbor.DevPackages.AppHost/          # Aspire app host — wires up services for local dev
   Arbor.DevPackages.ServiceDefaults/  # Shared Aspire defaults: OTel, health checks
@@ -121,6 +123,7 @@ src/
   Arbor.DevPackages.Core.Tests/
   Arbor.DevPackages.Storage.Sqlite.Tests/
   Arbor.DevPackages.Server.Tests/
+  Arbor.DevPackages.SystemTests/      # End-to-end system tests: real server process + dotnet restore
 ```
 
 ---
@@ -605,6 +608,101 @@ GetStats_WithNoDownloads_ReturnsEmptyArray
 
 ---
 
+## Iteration 13 — System tests (end-to-end)
+
+**Goal:** Verify the real, fully-assembled application from the outside — a real NuGet client performing `dotnet restore` against a running server instance, using no fakes or test doubles for the HTTP or storage layers. These differ from the integration tests in earlier iterations (which substitute fakes via `WebApplicationFactory`) by spinning up `Arbor.DevPackages.Server` as a real process on a real port and invoking `dotnet restore` as a subprocess.
+
+### Why system tests are different
+
+| | Integration tests (`*.Server.Tests`) | System tests (`*.SystemTests`) |
+|---|---|---|
+| Server | `WebApplicationFactory` (in-process) | Real `dotnet run` process on a free TCP port |
+| Storage | Temp directory, real filesystem | Temp directory, real filesystem |
+| Upstream | WireMock / fake `HttpMessageHandler` | Real nuget.org (scenario 1) or WireMock (scenario 2) |
+| NuGet client | `NuGet.Protocol` in-process | `dotnet restore` subprocess with custom `nuget.config` |
+| Scope | Endpoint behaviour | Full round-trip including NuGet client protocol quirks |
+
+### New project
+
+`Arbor.DevPackages.SystemTests` — references only `Arbor.DevPackages.Testing`; never references `Arbor.DevPackages.Core`, `Storage.Sqlite`, or `Server` directly (to keep the boundary honest).
+
+### Test infrastructure (shared helpers in `Arbor.DevPackages.SystemTests`)
+
+- `ServerFixture` — xUnit `IAsyncLifetime` class:
+  1. Picks a free TCP port.
+  2. Writes a temporary `appsettings.json` configuring one feed (`nuget-org`) pointing at the upstream URL for the current scenario.
+  3. Writes a temporary package store directory.
+  4. Starts `Arbor.DevPackages.Server` as a `Process` (`dotnet run` or the published binary).
+  5. Polls `GET /health` until the server responds `200 Healthy` (max 30 s timeout).
+  6. Exposes `BaseAddress` for use in tests.
+  7. On `DisposeAsync`: kills the process and deletes temp directories.
+
+- `NuGetClientFixture` — helper that:
+  1. Creates a temporary directory acting as the NuGet global packages cache (isolated per test run; `NUGET_PACKAGES` env var).
+  2. Writes a `nuget.config` that declares **only** `http://localhost:{port}/feeds/nuget-org/v3/index.json` as the package source (no fallback to nuget.org directly).
+  3. Creates a minimal `.csproj` with a single `<PackageReference>` to the probe package (`Serilog` at a pinned version).
+  4. Runs `dotnet restore {project}` as a subprocess and captures stdout, stderr, and exit code.
+
+- `WireMockUpstream` — thin wrapper around `WireMock.Net` that serves a minimal NuGet v3 flat-container for the cached-package scenario; configured to return `503 Service Unavailable` for any request not in its known set (simulating an offline upstream).
+
+### Scenario 1 — Passthrough to real nuget.org
+
+**Name:** `Restore_ViaProxy_WhenPackageNotCached_FetchesFromUpstreamAndSucceeds`
+
+**Steps:**
+1. Start `ServerFixture` with upstream = `https://api.nuget.org/v3/index.json`.
+2. Create `NuGetClientFixture` with `nuget.config` pointing exclusively at the local server.
+3. Ensure the local package store is empty (fresh temp dir).
+4. Run `dotnet restore` for the probe project referencing `Serilog 4.x` (latest stable pinned).
+5. Assert: exit code `0`.
+6. Assert: `Serilog.{version}.nupkg` exists in the temp global packages cache.
+7. Assert: the server's local store directory contains the fetched `.nupkg` and `.sha512` sidecar.
+
+**Why Serilog:** well-known, stable, MIT-licensed, small download; if it restores correctly the proxy works end-to-end.
+
+**Network note:** this test requires outbound internet access. Mark it with a custom `[Trait("Category", "SystemTest_Online")]` trait so it can be skipped in air-gapped CI environments.
+
+### Scenario 2 — Cached package, upstream unavailable
+
+**Name:** `Restore_ViaProxy_WhenPackageCachedAndUpstreamDown_SucceedsWithoutCallingUpstream`
+
+**Steps:**
+1. Pre-seed the local package store with `Serilog {version}.nupkg`, `.nuspec`, and `.sha512` (copy from a bundled test asset or download once into the repo's `testdata/` directory and commit).
+2. Start `ServerFixture` with upstream = `http://localhost:{wireMockPort}` (a `WireMockUpstream` configured to refuse all connections / return `503`).
+3. Create `NuGetClientFixture` with a fresh NuGet global packages cache (so the client must actually contact the server).
+4. Run `dotnet restore` for the same probe project.
+5. Assert: exit code `0`.
+6. Assert: `dotnet restore` wall-clock time < 5 seconds (no network round-trips to a real upstream).
+7. Assert: WireMock received zero requests (server served from local store without contacting upstream).
+
+**Why the timing assertion:** distinguishes "cached path" from "upstream timed out after 30 s then fell back to cache". If the implementation is correct the server returns the cached bytes immediately without attempting the upstream at all.
+
+### Tests to write (in `Arbor.DevPackages.SystemTests`)
+
+```
+Restore_ViaProxy_WhenPackageNotCached_FetchesFromUpstreamAndSucceeds
+Restore_ViaProxy_WhenPackageCachedAndUpstreamDown_SucceedsWithoutCallingUpstream
+```
+
+### TDD steps
+
+1. Write `Restore_ViaProxy_WhenPackageCachedAndUpstreamDown_SucceedsWithoutCallingUpstream` first (no network dependency) → fails (server does not exist yet) → implement the full server → passes.
+2. Write `Restore_ViaProxy_WhenPackageNotCached_FetchesFromUpstreamAndSucceeds` (requires network) → passes when upstream proxy (Iteration 8) is wired up.
+
+### Dependencies to add
+
+| Package | Version | License | Used in |
+|---|---|---|---|
+| `WireMock.Net` | latest stable | Apache 2.0 | `SystemTests` |
+
+`WireMock.Net` is MIT-compatible (Apache 2.0). Add to `Directory.Packages.props` and `THIRD_PARTY_NOTICES.md`.
+
+### Test assets
+
+- `testdata/serilog/` — committed directory containing `serilog.{version}.nupkg`, `serilog.{version}.nuspec`, and `serilog.{version}.sha512` for use as the pre-seeded local store in Scenario 2. The exact version must match the `<PackageReference>` in `NuGetClientFixture`'s probe project.
+
+---
+
 ## Iteration 12 — HTTPS support (deferred)
 
 **Goal:** Add HTTPS as an opt-in configuration option. HTTP remains the default for local developer use.
@@ -638,6 +736,8 @@ Each iteration follows this exact sequence:
 - Tests are committed **before** the production code that makes them pass, in separate commits when practical.
 - Fake and in-memory implementations of interfaces live in `Arbor.DevPackages.Testing` so they can be shared across all test projects.
 - Integration tests using `WebApplicationFactory<Program>` are written at the end of each iteration to validate the full HTTP stack.
+- System tests in `Arbor.DevPackages.SystemTests` spin up a real server process and invoke `dotnet restore` as a subprocess. They are the final safety net: they are always run last and are the authoritative proof that the system works end-to-end.
+- Online system tests (Scenario 1) are tagged `[Trait("Category", "SystemTest_Online")]` and may be skipped in air-gapped environments.
 - The CI pipeline must be green after every committed iteration.
 
 ---
@@ -666,6 +766,7 @@ Planned third-party dependencies:
 | `xunit.runner.visualstudio` | 2.x | Apache 2.0 | Testing |
 | `AwesomeAssertions` | 1.x | MIT | Testing |
 | `Microsoft.AspNetCore.Mvc.Testing` | 10.x | MIT | Integration tests |
+| `WireMock.Net` | latest stable | Apache 2.0 | System tests |
 | `coverlet.collector` | 6.x | MIT | Code coverage |
 
 ---
