@@ -112,4 +112,21 @@ public sealed class FileSystemPackageStoreTests : IDisposable
 
         await act.Should().ThrowAsync<PackageIntegrityException>();
     }
+
+    [Fact]
+    public async Task Read_MissingSidecar_ThrowsPackageIntegrityException()
+    {
+        using MemoryStream nupkg = MakeStream("fake-nupkg-content");
+        using MemoryStream nuspec = MakeStream("<package />");
+        await _store.StoreAsync(_identity, nupkg, nuspec, CancellationToken.None);
+
+        string id = _identity.Id.ToLowerInvariant();
+        string version = _identity.Version.ToLowerInvariant();
+        string sha512Path = Path.Combine(_tempDir, id, version, $"{id}.{version}.sha512");
+        File.Delete(sha512Path);
+
+        Func<Task> act = () => _store.OpenNupkgAsync(_identity, CancellationToken.None);
+
+        await act.Should().ThrowAsync<PackageIntegrityException>();
+    }
 }

@@ -106,6 +106,11 @@ public sealed class FileSystemPackageStore : IPackageStore
         }
 
         string sha512Path = Sha512Path(_storePath, identity);
+        if (!File.Exists(sha512Path))
+        {
+            throw new PackageIntegrityException(identity);
+        }
+
         string storedHash = await File.ReadAllTextAsync(sha512Path, cancellationToken);
         string actualHash = await ComputeSha512FromFileAsync(nupkgPath, cancellationToken);
 
@@ -141,9 +146,19 @@ public sealed class FileSystemPackageStore : IPackageStore
         }
 
         string sha512Path = Sha512Path(_storePath, identity);
+        if (!File.Exists(sha512Path))
+        {
+            throw new PackageIntegrityException(identity);
+        }
+
         string sha512 = await File.ReadAllTextAsync(sha512Path, cancellationToken);
 
         string nuspecPath = NuspecPath(_storePath, identity);
+        if (!File.Exists(nuspecPath))
+        {
+            throw new PackageIntegrityException(identity);
+        }
+
         string nuspecContent = await File.ReadAllTextAsync(nuspecPath, cancellationToken);
 
         return new PackageMetadata(identity, sha512, nuspecContent);
