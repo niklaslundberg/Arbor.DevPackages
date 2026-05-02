@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using Arbor.Aesculus.NCrunch;
 using Xunit;
 
 namespace Arbor.DevPackages.SystemTests;
@@ -183,6 +184,17 @@ public sealed class ServerFixture : IAsyncLifetime
 
         if (!Directory.Exists(testdataDir))
         {
+            // NCrunch shadow-copies the test assembly to a temp location outside the repository.
+            // Fall back to the original repository root to locate testdata.
+            var vcsRoot = VcsTestPathHelper.TryFindVcsRootPath();
+            if (vcsRoot is not null)
+            {
+                testdataDir = Path.Combine(vcsRoot, "testdata", "serilog");
+            }
+        }
+
+        if (!Directory.Exists(testdataDir))
+        {
             throw new DirectoryNotFoundException(
                 $"Test-asset directory not found: '{testdataDir}'. " +
                 "Ensure the testdata/serilog/ directory exists and contains the Serilog package assets.");
@@ -215,6 +227,7 @@ public sealed class ServerFixture : IAsyncLifetime
     ///   <item><description><c>artifacts/bin/{project}/{config}/</c> — no TFM sub-folder (current layout)</description></item>
     ///   <item><description><c>artifacts/bin/{project}/{config}/{tfm}/</c> — with TFM sub-folder</description></item>
     /// </list>
+    /// Also handles NCrunch, which shadow-copies assemblies outside the repository tree.
     /// </summary>
     private static string FindServerExecutable()
     {
@@ -255,6 +268,40 @@ public sealed class ServerFixture : IAsyncLifetime
                 if (File.Exists(candidate2))
                 {
                     return candidate2;
+                }
+            }
+        }
+
+        // Layout 3 (NCrunch): the test assembly is shadow-copied to a temp directory outside the
+        // repository. Use the VCS root to resolve the artifacts/bin/ directory directly.
+        var vcsRoot = VcsTestPathHelper.TryFindVcsRootPath();
+        if (vcsRoot is not null)
+        {
+            var artifactsBin = Path.Combine(vcsRoot, "artifacts", "bin", "Arbor.DevPackages.Server");
+            foreach (var config in new[] { "release", "debug" })
+            {
+                var configDir = Path.Combine(artifactsBin, config);
+
+                var candidate3 = Path.Combine(configDir, exeName);
+                if (File.Exists(candidate3))
+                {
+                    return candidate3;
+                }
+
+                // Also try with TFM sub-folder.
+                if (Directory.Exists(configDir))
+                {
+                    foreach (var tfm in Directory.EnumerateDirectories(
+                                 configDir,
+                                 "net*",
+                                 new EnumerationOptions { RecurseSubdirectories = false, IgnoreInaccessible = true }))
+                    {
+                        var candidate3Tfm = Path.Combine(tfm, exeName);
+                        if (File.Exists(candidate3Tfm))
+                        {
+                            return candidate3Tfm;
+                        }
+                    }
                 }
             }
         }
