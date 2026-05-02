@@ -371,4 +371,141 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
             Directory.Delete(isolatedContentRoot, recursive: true);
         }
     }
+
+    // ─── Edge cases ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Search_MatchByDescription_ReturnsMatchingPackage()
+    {
+        var entries = new[]
+        {
+            BuildPackage("Serilog", "3.1.1", description: "Simple structured logging"),
+            BuildPackage("Newtonsoft.Json", "13.0.3", description: "JSON serialization framework")
+        };
+
+        using var factory = BuildFactory(new FakeUpstreamSearchCache(entries));
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/feeds/default/v3/search?q=structured+logging");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+
+        var ids = doc.RootElement.GetProperty("data")
+            .EnumerateArray()
+            .Select(e => e.GetProperty("id").GetString())
+            .ToList();
+
+        ids.Should().Contain("Serilog");
+        ids.Should().NotContain("Newtonsoft.Json");
+    }
+
+    [Fact]
+    public async Task Search_PackageWithNoVersionsList_StableTopLevelVersion_IsIncludedWithoutPrerelease()
+    {
+        // Package has no Versions list — only a top-level Version string.
+        // When it is stable, it should pass the HasStableVersion check.
+        var entries = new[]
+        {
+            new SearchResultPackage(
+                AtId: null, Id: "SomePkg", Version: "1.0.0",
+                Description: null, Summary: null, Title: "SomePkg",
+                IconUrl: null, LicenseUrl: null, ProjectUrl: null,
+                Tags: null, Authors: null, TotalDownloads: 0, Verified: false,
+                Versions: null)
+        };
+
+        using var factory = BuildFactory(new FakeUpstreamSearchCache(entries));
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/feeds/default/v3/search?prerelease=false");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+
+        doc.RootElement.GetProperty("totalHits").GetInt32().Should().Be(1);
+        doc.RootElement.GetProperty("data")[0].GetProperty("id").GetString().Should().Be("SomePkg");
+    }
+
+    [Fact]
+    public async Task Search_PackageWithNoVersionsList_PrereleaseTopLevelVersion_IsExcludedWithoutPrerelease()
+    {
+        // Package has no Versions list and a pre-release top-level version.
+        // Without prerelease=true it should be excluded.
+        var entries = new[]
+        {
+            new SearchResultPackage(
+                AtId: null, Id: "BetaPkg", Version: "1.0.0-beta.1",
+                Description: null, Summary: null, Title: "BetaPkg",
+                IconUrl: null, LicenseUrl: null, ProjectUrl: null,
+                Tags: null, Authors: null, TotalDownloads: 0, Verified: false,
+                Versions: null)
+        };
+
+        using var factory = BuildFactory(new FakeUpstreamSearchCache(entries));
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/feeds/default/v3/search?prerelease=false");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+
+        doc.RootElement.GetProperty("totalHits").GetInt32().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Search_WhenCacheHasNullEntries_ReturnsEmpty()
+    {
+        // GetAllEntries() returns null — treated as an empty list.
+        using var factory = BuildFactory(new FakeUpstreamSearchCache(entries: null));
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/feeds/default/v3/search");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+
+        doc.RootElement.GetProperty("totalHits").GetInt32().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Search_UnknownFeed_Returns404()
+    {
+        using var factory = BuildFactory(new FakeUpstreamSearchCache([]));
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/feeds/nonexistent/v3/search");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Search_WithSkipAndTake_ReturnsPaginatedSubset()
+    {
+        var entries = Enumerable.Range(1, 10)
+            .Select(i => BuildPackage($"Package{i:D2}", "1.0.0"))
+            .ToArray();
+
+        using var factory = BuildFactory(new FakeUpstreamSearchCache(entries));
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/feeds/default/v3/search?skip=3&take=4");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+
+        // totalHits reflects the total matching count (10), not the page size.
+        doc.RootElement.GetProperty("totalHits").GetInt32().Should().Be(10);
+        doc.RootElement.GetProperty("data").GetArrayLength().Should().Be(4);
+    }
 }

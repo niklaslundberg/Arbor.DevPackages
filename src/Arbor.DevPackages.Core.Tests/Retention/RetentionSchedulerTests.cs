@@ -77,6 +77,75 @@ public sealed class RetentionSchedulerTests
             "purge list should be logged before individual deletions");
     }
 
+    [Fact]
+    public async Task ScheduleAsync_WhenNoPackagesExist_LogsNoCandidates()
+    {
+        DateTimeOffset oldDownload = Now.AddMinutes(-10);
+
+        FakePackageStore store = new([]);
+        FakeRetentionPolicy policy = new(OldPackage, RetentionAction.Purge);
+        FakeStatisticsReader stats = new(globalLastDownload: oldDownload);
+        FakeLogger<RetentionScheduler> logger = new();
+
+        RetentionScheduler scheduler = new(store, policy, stats, RetentionOptions.Default, new FakeTimeProvider(Now), logger);
+
+        await scheduler.ScheduleAsync(CancellationToken.None);
+
+        store.DeletedPackages.Should().BeEmpty();
+        logger.Messages.Should().Contain(m => m.Contains("no packages eligible", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ScheduleAsync_WhenNoDownloadsEverRecorded_PurgesEligiblePackages()
+    {
+        // When GetLastDownloadedAtAcrossAllPackagesAsync returns null (no downloads ever),
+        // the inactivity check is skipped and the scheduler proceeds.
+        FakePackageStore store = new([OldPackage]);
+        FakeRetentionPolicy policy = new(OldPackage, RetentionAction.Purge);
+        FakeStatisticsReader stats = new(globalLastDownload: null);
+        FakeLogger<RetentionScheduler> logger = new();
+
+        RetentionScheduler scheduler = new(store, policy, stats, RetentionOptions.Default, new FakeTimeProvider(Now), logger);
+
+        await scheduler.ScheduleAsync(CancellationToken.None);
+
+        store.DeletedPackages.Should().ContainSingle().Which.Should().Be(OldPackage);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenStopped_ExitsCleanly()
+    {
+        // Use a signalling statistics reader: the first time the background
+        // loop calls GetLastDownloadedAtAcrossAllPackagesAsync it sets the TCS,
+        // so we wait for that event deterministically instead of sleeping.
+        var iterationReached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        FakePackageStore store = new([]);
+        FakeRetentionPolicy policy = new(OldPackage, RetentionAction.Keep);
+        var stats = new SignallingStatisticsReader(iterationReached);
+        FakeLogger<RetentionScheduler> logger = new();
+
+        // The scheduler interval can be short — we stop as soon as the first
+        // iteration signals, so we never actually wait for the delay to elapse.
+        var options = new RetentionOptions
+        {
+            SchedulerInterval = TimeSpan.FromMilliseconds(10),
+            InactivityThreshold = TimeSpan.FromMinutes(5),
+            RetentionWindow = TimeSpan.FromDays(30)
+        };
+
+        RetentionScheduler scheduler = new(store, policy, stats, options, new FakeTimeProvider(Now), logger);
+
+        await scheduler.StartAsync(CancellationToken.None);
+
+        // Wait deterministically until the background loop has run at least once.
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await iterationReached.Task.WaitAsync(timeout.Token);
+
+        // Stop the service — should not hang or throw.
+        await scheduler.StopAsync(CancellationToken.None);
+    }
+
     // --- Fakes ---
 
     private sealed class FakePackageStore : IPackageStore
@@ -180,5 +249,36 @@ public sealed class RetentionSchedulerTests
         {
             Messages.Add(formatter(state, exception));
         }
+    }
+
+    /// <summary>
+    /// A statistics reader that signals a <see cref="TaskCompletionSource"/> the first time
+    /// the background loop calls <see cref="GetLastDownloadedAtAcrossAllPackagesAsync"/>.
+    /// This lets tests wait deterministically for the first background iteration
+    /// without any wall-clock sleeps.
+    /// </summary>
+    private sealed class SignallingStatisticsReader : IStatisticsReader
+    {
+        private readonly TaskCompletionSource _firstIterationSignal;
+
+        public SignallingStatisticsReader(TaskCompletionSource firstIterationSignal)
+        {
+            _firstIterationSignal = firstIterationSignal;
+        }
+
+        public Task<long> GetDownloadCountAsync(PackageIdentity identity, CancellationToken cancellationToken)
+            => Task.FromResult(0L);
+
+        public Task<DateTimeOffset?> GetLastDownloadedAtAsync(PackageIdentity identity, CancellationToken cancellationToken)
+            => Task.FromResult<DateTimeOffset?>(null);
+
+        public Task<DateTimeOffset?> GetLastDownloadedAtAcrossAllPackagesAsync(CancellationToken cancellationToken)
+        {
+            _firstIterationSignal.TrySetResult();
+            return Task.FromResult<DateTimeOffset?>(null);
+        }
+
+        public Task<IReadOnlyList<PackageStatsSummary>> GetAllPackageStatsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<PackageStatsSummary>>([]);
     }
 }
