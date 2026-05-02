@@ -27,7 +27,7 @@ public sealed class RetentionSchedulerTests
 
         RetentionScheduler scheduler = new(store, policy, stats, RetentionOptions.Default, new FakeTimeProvider(Now), logger);
 
-        await scheduler.ScheduleAsync(CancellationToken.None);
+        await scheduler.ScheduleAsync(TestContext.Current.CancellationToken);
 
         store.DeletedPackages.Should().BeEmpty();
     }
@@ -46,7 +46,7 @@ public sealed class RetentionSchedulerTests
 
         RetentionScheduler scheduler = new(store, policy, stats, RetentionOptions.Default, new FakeTimeProvider(Now), logger);
 
-        await scheduler.ScheduleAsync(CancellationToken.None);
+        await scheduler.ScheduleAsync(TestContext.Current.CancellationToken);
 
         store.DeletedPackages.Should().ContainSingle().Which.Should().Be(OldPackage);
     }
@@ -63,7 +63,7 @@ public sealed class RetentionSchedulerTests
 
         RetentionScheduler scheduler = new(store, policy, stats, RetentionOptions.Default, new FakeTimeProvider(Now), logger);
 
-        await scheduler.ScheduleAsync(CancellationToken.None);
+        await scheduler.ScheduleAsync(TestContext.Current.CancellationToken);
 
         // A log entry listing purge candidates must appear before any deletion.
         int purgeListLogIndex = logger.Messages.FindIndex(
@@ -89,10 +89,10 @@ public sealed class RetentionSchedulerTests
 
         RetentionScheduler scheduler = new(store, policy, stats, RetentionOptions.Default, new FakeTimeProvider(Now), logger);
 
-        await scheduler.ScheduleAsync(CancellationToken.None);
+        await scheduler.ScheduleAsync(TestContext.Current.CancellationToken);
 
         store.DeletedPackages.Should().BeEmpty();
-        logger.Messages.Should().Contain(m => m.Contains("no packages eligible", StringComparison.OrdinalIgnoreCase));
+        logger.Messages.Should().Contain(message => message.Contains("no packages eligible", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -107,7 +107,7 @@ public sealed class RetentionSchedulerTests
 
         RetentionScheduler scheduler = new(store, policy, stats, RetentionOptions.Default, new FakeTimeProvider(Now), logger);
 
-        await scheduler.ScheduleAsync(CancellationToken.None);
+        await scheduler.ScheduleAsync(TestContext.Current.CancellationToken);
 
         store.DeletedPackages.Should().ContainSingle().Which.Should().Be(OldPackage);
     }
@@ -136,14 +136,14 @@ public sealed class RetentionSchedulerTests
 
         RetentionScheduler scheduler = new(store, policy, stats, options, new FakeTimeProvider(Now), logger);
 
-        await scheduler.StartAsync(CancellationToken.None);
+        await scheduler.StartAsync(TestContext.Current.CancellationToken);
 
         // Wait deterministically until the background loop has run at least once.
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await iterationReached.Task.WaitAsync(timeout.Token);
 
         // Stop the service — should not hang or throw.
-        await scheduler.StopAsync(CancellationToken.None);
+        await scheduler.StopAsync(TestContext.Current.CancellationToken);
     }
 
     // --- Fakes ---

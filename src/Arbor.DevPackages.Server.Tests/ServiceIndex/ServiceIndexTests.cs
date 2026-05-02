@@ -27,11 +27,11 @@ public sealed class ServiceIndexTests : IClassFixture<WebApplicationFactory<Prog
     {
         var client = _factory.CreateClient();
 
-        var response = await client.GetAsync("/feeds/default/v3/index.json");
+        var response = await client.GetAsync("/feeds/default/v3/index.json", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
@@ -45,9 +45,9 @@ public sealed class ServiceIndexTests : IClassFixture<WebApplicationFactory<Prog
         var client = _factory.CreateClient();
         var expectedHost = client.BaseAddress!.Host;
 
-        var response = await client.GetAsync("/feeds/default/v3/index.json");
+        var response = await client.GetAsync("/feeds/default/v3/index.json", TestContext.Current.CancellationToken);
 
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(json);
         var resources = doc.RootElement.GetProperty("resources");
 
@@ -63,7 +63,7 @@ public sealed class ServiceIndexTests : IClassFixture<WebApplicationFactory<Prog
     {
         var client = _factory.CreateClient();
 
-        var response = await client.GetAsync("/feeds/default/v3/index.json");
+        var response = await client.GetAsync("/feeds/default/v3/index.json", TestContext.Current.CancellationToken);
 
         response.Content.Headers.ContentType?.MediaType.Should().Be("application/json");
     }
@@ -73,7 +73,7 @@ public sealed class ServiceIndexTests : IClassFixture<WebApplicationFactory<Prog
     {
         var client = _factory.CreateClient();
 
-        var response = await client.GetAsync("/feeds/nonexistent-feed/v3/index.json");
+        var response = await client.GetAsync("/feeds/nonexistent-feed/v3/index.json", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -83,11 +83,11 @@ public sealed class ServiceIndexTests : IClassFixture<WebApplicationFactory<Prog
     {
         var client = _factory.CreateClient();
 
-        var response = await client.GetAsync("/feeds/default/v3/index.json");
+        var response = await client.GetAsync("/feeds/default/v3/index.json", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(json);
         var resources = doc.RootElement.GetProperty("resources");
 
@@ -121,7 +121,7 @@ public sealed class ServiceIndexTests : IClassFixture<WebApplicationFactory<Prog
             var feedsGroup = app.MapGroup("/feeds/{feedId}");
             Arbor.DevPackages.Server.ServiceIndex.ServiceIndexEndpoints.MapServiceIndex(feedsGroup);
 
-            await app.StartAsync();
+            await app.StartAsync(TestContext.Current.CancellationToken);
 
             try
             {
@@ -132,7 +132,7 @@ public sealed class ServiceIndexTests : IClassFixture<WebApplicationFactory<Prog
                 var source = new PackageSource(indexUrl);
                 var repository = Repository.Factory.GetCoreV3(source);
 
-                var serviceIndex = await repository.GetResourceAsync<ServiceIndexResourceV3>(CancellationToken.None);
+                var serviceIndex = await repository.GetResourceAsync<ServiceIndexResourceV3>(TestContext.Current.CancellationToken);
 
                 serviceIndex.Should().NotBeNull();
                 serviceIndex.GetServiceEntryUri("PackageBaseAddress/3.0.0").Should().NotBeNull();
@@ -141,7 +141,7 @@ public sealed class ServiceIndexTests : IClassFixture<WebApplicationFactory<Prog
             }
             finally
             {
-                await app.StopAsync();
+                await app.StopAsync(TestContext.Current.CancellationToken);
             }
         }
         finally
@@ -153,8 +153,8 @@ public sealed class ServiceIndexTests : IClassFixture<WebApplicationFactory<Prog
     [Fact]
     public async Task GetServiceIndex_PushEnabledFeed_IncludesPackagePublishResource()
     {
-        using var factory = _factory.WithWebHostBuilder(b =>
-            b.ConfigureServices(services =>
+        using var factory = _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
             {
                 services.AddSingleton<IFeedRouter>(
                     new FeedRouter(
@@ -163,11 +163,11 @@ public sealed class ServiceIndexTests : IClassFixture<WebApplicationFactory<Prog
 
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/feeds/local/v3/index.json");
+        var response = await client.GetAsync("/feeds/local/v3/index.json", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(json);
         var resources = doc.RootElement.GetProperty("resources");
 
@@ -191,9 +191,9 @@ public sealed class ServiceIndexTests : IClassFixture<WebApplicationFactory<Prog
     {
         var client = _factory.CreateClient();
 
-        var response = await client.GetAsync("/feeds/default/v3/index.json");
+        var response = await client.GetAsync("/feeds/default/v3/index.json", TestContext.Current.CancellationToken);
 
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(json);
         var resources = doc.RootElement.GetProperty("resources");
 

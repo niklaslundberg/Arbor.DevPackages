@@ -64,8 +64,12 @@ Before implementing:
 ### Null safety
 
 - Enable nullable reference types globally (`<Nullable>enable</Nullable>`).
-- Use `is null` / `is not null` rather than `== null` / `!= null`.
+- Use `is null` / `is { }` rather than `== null` / `!= null`. Prefer `is { }` over `is not null` for non-null checks.
 - Use `ArgumentNullException.ThrowIfNull` for public API parameter validation.
+
+### Naming
+
+- Prefer descriptive lambda parameter names; avoid single-character names. Use `entry =>` not `e =>`, `package =>` not `p =>`, `version =>` not `v =>`.
 
 ### Immutability
 
@@ -99,7 +103,7 @@ Before implementing:
 - The test method name must reflect the **actual production method being tested** — use `OpenNupkgAsync_StoredPackage_ReturnsSameBytes`, not `Read_StoredPackage_ReturnsSameBytes`.
 - New or changed production code must include test coverage.
 - Every public method must have at least one test. Untested public methods are not acceptable even when the uncovered lines appear trivial.
-- Use `xUnit` + `AwesomeAssertions`.
+- Use `xUnit v3` (`xunit.v3`) + `AwesomeAssertions`. Pass `TestContext.Current.CancellationToken` to all async calls within test methods.
 - Use `WebApplicationFactory<TEntryPoint>` for HTTP endpoint integration tests.
 - Test project boundaries must mirror library boundaries: tests for a library live in a dedicated test project referencing only that library and shared test helpers.
 - Do not add cross-layer `<ProjectReference>` entries to an existing test project.

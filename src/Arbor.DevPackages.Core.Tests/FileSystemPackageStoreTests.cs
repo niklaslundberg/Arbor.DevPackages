@@ -38,7 +38,7 @@ public sealed class FileSystemPackageStoreTests : IDisposable
         using MemoryStream nupkg = MakeStream("fake-nupkg-content");
         using MemoryStream nuspec = MakeStream("<package />");
 
-        PackageStoreResult result = await _store.StoreAsync(_identity, nupkg, nuspec, CancellationToken.None);
+        PackageStoreResult result = await _store.StoreAsync(_identity, nupkg, nuspec, TestContext.Current.CancellationToken);
 
         result.Should().Be(PackageStoreResult.Stored);
 
@@ -52,7 +52,7 @@ public sealed class FileSystemPackageStoreTests : IDisposable
         string sha512File = Path.Combine(dir, $"{id}.{version}.sha512");
         File.Exists(sha512File).Should().BeTrue();
 
-        string storedHash = await File.ReadAllTextAsync(sha512File);
+        string storedHash = await File.ReadAllTextAsync(sha512File, TestContext.Current.CancellationToken);
         storedHash.Should().NotBeEmpty();
 
         byte[] nupkgBytes = Encoding.UTF8.GetBytes("fake-nupkg-content");
@@ -65,11 +65,11 @@ public sealed class FileSystemPackageStoreTests : IDisposable
     {
         using MemoryStream nupkg1 = MakeStream("fake-nupkg-content");
         using MemoryStream nuspec1 = MakeStream("<package />");
-        await _store.StoreAsync(_identity, nupkg1, nuspec1, CancellationToken.None);
+        await _store.StoreAsync(_identity, nupkg1, nuspec1, TestContext.Current.CancellationToken);
 
         using MemoryStream nupkg2 = MakeStream("fake-nupkg-content");
         using MemoryStream nuspec2 = MakeStream("<package />");
-        PackageStoreResult result = await _store.StoreAsync(_identity, nupkg2, nuspec2, CancellationToken.None);
+        PackageStoreResult result = await _store.StoreAsync(_identity, nupkg2, nuspec2, TestContext.Current.CancellationToken);
 
         result.Should().Be(PackageStoreResult.AlreadyExists);
     }
@@ -82,14 +82,14 @@ public sealed class FileSystemPackageStoreTests : IDisposable
         using NonSeekableStream nupkg = new(inner);
         using MemoryStream nuspec = MakeStream("<package />");
 
-        PackageStoreResult result = await _store.StoreAsync(_identity, nupkg, nuspec, CancellationToken.None);
+        PackageStoreResult result = await _store.StoreAsync(_identity, nupkg, nuspec, TestContext.Current.CancellationToken);
 
         result.Should().Be(PackageStoreResult.Stored);
 
         string id = _identity.Id.ToLowerInvariant();
         string version = _identity.Version.ToLowerInvariant();
         byte[] stored = await File.ReadAllBytesAsync(
-            Path.Combine(_tempDir, id, version, $"{id}.{version}.nupkg"));
+            Path.Combine(_tempDir, id, version, $"{id}.{version}.nupkg"), TestContext.Current.CancellationToken);
         stored.Should().BeEquivalentTo(originalBytes);
     }
 
@@ -100,7 +100,7 @@ public sealed class FileSystemPackageStoreTests : IDisposable
         using MemoryStream nupkg = MakeStream("content");
         using MemoryStream nuspec = MakeStream("<package />");
 
-        Func<Task> act = () => _store.StoreAsync(maliciousIdentity, nupkg, nuspec, CancellationToken.None);
+        Func<Task> act = () => _store.StoreAsync(maliciousIdentity, nupkg, nuspec, TestContext.Current.CancellationToken);
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
@@ -113,7 +113,7 @@ public sealed class FileSystemPackageStoreTests : IDisposable
         using MemoryStream nupkg = MakeStream("content");
         using MemoryStream nuspec = MakeStream("<package />");
 
-        Func<Task> act = () => _store.StoreAsync(maliciousIdentity, nupkg, nuspec, CancellationToken.None);
+        Func<Task> act = () => _store.StoreAsync(maliciousIdentity, nupkg, nuspec, TestContext.Current.CancellationToken);
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
@@ -126,7 +126,7 @@ public sealed class FileSystemPackageStoreTests : IDisposable
         using MemoryStream nupkg = MakeStream("content");
         using MemoryStream nuspec = MakeStream("<package />");
 
-        Func<Task> act = () => _store.StoreAsync(maliciousIdentity, nupkg, nuspec, CancellationToken.None);
+        Func<Task> act = () => _store.StoreAsync(maliciousIdentity, nupkg, nuspec, TestContext.Current.CancellationToken);
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
@@ -139,20 +139,20 @@ public sealed class FileSystemPackageStoreTests : IDisposable
         byte[] originalBytes = Encoding.UTF8.GetBytes("fake-nupkg-content");
         using MemoryStream nupkg = new(originalBytes);
         using MemoryStream nuspec = MakeStream("<package />");
-        await _store.StoreAsync(_identity, nupkg, nuspec, CancellationToken.None);
+        await _store.StoreAsync(_identity, nupkg, nuspec, TestContext.Current.CancellationToken);
 
-        await using Stream? result = await _store.OpenNupkgAsync(_identity, CancellationToken.None);
+        await using Stream? result = await _store.OpenNupkgAsync(_identity, TestContext.Current.CancellationToken);
 
         result.Should().NotBeNull();
         using MemoryStream ms = new();
-        await result!.CopyToAsync(ms);
+        await result!.CopyToAsync(ms, TestContext.Current.CancellationToken);
         ms.ToArray().Should().BeEquivalentTo(originalBytes);
     }
 
     [Fact]
     public async Task Read_MissingPackage_ReturnsNull()
     {
-        Stream? result = await _store.OpenNupkgAsync(_identity, CancellationToken.None);
+        Stream? result = await _store.OpenNupkgAsync(_identity, TestContext.Current.CancellationToken);
 
         result.Should().BeNull();
     }
@@ -162,14 +162,14 @@ public sealed class FileSystemPackageStoreTests : IDisposable
     {
         using MemoryStream nupkg = MakeStream("fake-nupkg-content");
         using MemoryStream nuspec = MakeStream("<package />");
-        await _store.StoreAsync(_identity, nupkg, nuspec, CancellationToken.None);
+        await _store.StoreAsync(_identity, nupkg, nuspec, TestContext.Current.CancellationToken);
 
         string id = _identity.Id.ToLowerInvariant();
         string version = _identity.Version.ToLowerInvariant();
         string nupkgPath = Path.Combine(_tempDir, id, version, $"{id}.{version}.nupkg");
-        await File.WriteAllTextAsync(nupkgPath, "tampered-content");
+        await File.WriteAllTextAsync(nupkgPath, "tampered-content", TestContext.Current.CancellationToken);
 
-        Func<Task> act = () => _store.OpenNupkgAsync(_identity, CancellationToken.None);
+        Func<Task> act = () => _store.OpenNupkgAsync(_identity, TestContext.Current.CancellationToken);
 
         await act.Should().ThrowAsync<PackageIntegrityException>();
     }
@@ -179,14 +179,14 @@ public sealed class FileSystemPackageStoreTests : IDisposable
     {
         using MemoryStream nupkg = MakeStream("fake-nupkg-content");
         using MemoryStream nuspec = MakeStream("<package />");
-        await _store.StoreAsync(_identity, nupkg, nuspec, CancellationToken.None);
+        await _store.StoreAsync(_identity, nupkg, nuspec, TestContext.Current.CancellationToken);
 
         string id = _identity.Id.ToLowerInvariant();
         string version = _identity.Version.ToLowerInvariant();
         string sha512Path = Path.Combine(_tempDir, id, version, $"{id}.{version}.sha512");
         File.Delete(sha512Path);
 
-        Func<Task> act = () => _store.OpenNupkgAsync(_identity, CancellationToken.None);
+        Func<Task> act = () => _store.OpenNupkgAsync(_identity, TestContext.Current.CancellationToken);
 
         await act.Should().ThrowAsync<PackageIntegrityException>();
     }
@@ -199,20 +199,20 @@ public sealed class FileSystemPackageStoreTests : IDisposable
         const string nuspecXml = "<package><metadata><id>Serilog</id></metadata></package>";
         using MemoryStream nupkg = MakeStream("fake-nupkg-content");
         using MemoryStream nuspec = MakeStream(nuspecXml);
-        await _store.StoreAsync(_identity, nupkg, nuspec, CancellationToken.None);
+        await _store.StoreAsync(_identity, nupkg, nuspec, TestContext.Current.CancellationToken);
 
-        await using Stream? result = await _store.OpenNuspecAsync(_identity, CancellationToken.None);
+        await using Stream? result = await _store.OpenNuspecAsync(_identity, TestContext.Current.CancellationToken);
 
         result.Should().NotBeNull();
         using StreamReader reader = new(result!);
-        string content = await reader.ReadToEndAsync();
+        string content = await reader.ReadToEndAsync(TestContext.Current.CancellationToken);
         content.Should().Be(nuspecXml);
     }
 
     [Fact]
     public async Task OpenNuspecAsync_MissingPackage_ReturnsNull()
     {
-        Stream? result = await _store.OpenNuspecAsync(_identity, CancellationToken.None);
+        Stream? result = await _store.OpenNuspecAsync(_identity, TestContext.Current.CancellationToken);
 
         result.Should().BeNull();
     }
@@ -222,14 +222,14 @@ public sealed class FileSystemPackageStoreTests : IDisposable
     {
         using MemoryStream nupkg = MakeStream("fake-nupkg-content");
         using MemoryStream nuspec = MakeStream("<package />");
-        await _store.StoreAsync(_identity, nupkg, nuspec, CancellationToken.None);
+        await _store.StoreAsync(_identity, nupkg, nuspec, TestContext.Current.CancellationToken);
 
         string id = _identity.Id.ToLowerInvariant();
         string version = _identity.Version.ToLowerInvariant();
         string nuspecPath = Path.Combine(_tempDir, id, version, $"{id}.{version}.nuspec");
         File.Delete(nuspecPath);
 
-        Func<Task> act = () => _store.OpenNuspecAsync(_identity, CancellationToken.None);
+        Func<Task> act = () => _store.OpenNuspecAsync(_identity, TestContext.Current.CancellationToken);
 
         await act.Should().ThrowAsync<PackageIntegrityException>();
     }
@@ -243,9 +243,9 @@ public sealed class FileSystemPackageStoreTests : IDisposable
         byte[] nupkgBytes = Encoding.UTF8.GetBytes("fake-nupkg-content");
         using MemoryStream nupkg = new(nupkgBytes);
         using MemoryStream nuspec = MakeStream(nuspecXml);
-        await _store.StoreAsync(_identity, nupkg, nuspec, CancellationToken.None);
+        await _store.StoreAsync(_identity, nupkg, nuspec, TestContext.Current.CancellationToken);
 
-        PackageMetadata? metadata = await _store.GetMetadataAsync(_identity, CancellationToken.None);
+        PackageMetadata? metadata = await _store.GetMetadataAsync(_identity, TestContext.Current.CancellationToken);
 
         metadata.Should().NotBeNull();
         metadata!.Identity.Should().Be(_identity);
@@ -256,7 +256,7 @@ public sealed class FileSystemPackageStoreTests : IDisposable
     [Fact]
     public async Task GetMetadataAsync_MissingPackage_ReturnsNull()
     {
-        PackageMetadata? result = await _store.GetMetadataAsync(_identity, CancellationToken.None);
+        PackageMetadata? result = await _store.GetMetadataAsync(_identity, TestContext.Current.CancellationToken);
 
         result.Should().BeNull();
     }
@@ -266,14 +266,14 @@ public sealed class FileSystemPackageStoreTests : IDisposable
     {
         using MemoryStream nupkg = MakeStream("fake-nupkg-content");
         using MemoryStream nuspec = MakeStream("<package />");
-        await _store.StoreAsync(_identity, nupkg, nuspec, CancellationToken.None);
+        await _store.StoreAsync(_identity, nupkg, nuspec, TestContext.Current.CancellationToken);
 
         string id = _identity.Id.ToLowerInvariant();
         string version = _identity.Version.ToLowerInvariant();
         string nupkgPath = Path.Combine(_tempDir, id, version, $"{id}.{version}.nupkg");
-        await File.WriteAllTextAsync(nupkgPath, "tampered");
+        await File.WriteAllTextAsync(nupkgPath, "tampered", TestContext.Current.CancellationToken);
 
-        Func<Task> act = () => _store.GetMetadataAsync(_identity, CancellationToken.None);
+        Func<Task> act = () => _store.GetMetadataAsync(_identity, TestContext.Current.CancellationToken);
 
         await act.Should().ThrowAsync<PackageIntegrityException>();
     }
@@ -285,9 +285,9 @@ public sealed class FileSystemPackageStoreTests : IDisposable
     {
         using MemoryStream nupkg = MakeStream("fake-nupkg-content");
         using MemoryStream nuspec = MakeStream("<package />");
-        await _store.StoreAsync(_identity, nupkg, nuspec, CancellationToken.None);
+        await _store.StoreAsync(_identity, nupkg, nuspec, TestContext.Current.CancellationToken);
 
-        bool exists = await _store.ExistsAsync(_identity, CancellationToken.None);
+        bool exists = await _store.ExistsAsync(_identity, TestContext.Current.CancellationToken);
 
         exists.Should().BeTrue();
     }
@@ -295,7 +295,7 @@ public sealed class FileSystemPackageStoreTests : IDisposable
     [Fact]
     public async Task ExistsAsync_MissingPackage_ReturnsFalse()
     {
-        bool exists = await _store.ExistsAsync(_identity, CancellationToken.None);
+        bool exists = await _store.ExistsAsync(_identity, TestContext.Current.CancellationToken);
 
         exists.Should().BeFalse();
     }
@@ -307,18 +307,18 @@ public sealed class FileSystemPackageStoreTests : IDisposable
     {
         using MemoryStream nupkg = MakeStream("fake-nupkg-content");
         using MemoryStream nuspec = MakeStream("<package />");
-        await _store.StoreAsync(_identity, nupkg, nuspec, CancellationToken.None);
+        await _store.StoreAsync(_identity, nupkg, nuspec, TestContext.Current.CancellationToken);
 
-        await _store.DeleteAsync(_identity, CancellationToken.None);
+        await _store.DeleteAsync(_identity, TestContext.Current.CancellationToken);
 
-        bool exists = await _store.ExistsAsync(_identity, CancellationToken.None);
+        bool exists = await _store.ExistsAsync(_identity, TestContext.Current.CancellationToken);
         exists.Should().BeFalse();
     }
 
     [Fact]
     public async Task DeleteAsync_NonExistingPackage_DoesNotThrow()
     {
-        Func<Task> act = () => _store.DeleteAsync(_identity, CancellationToken.None);
+        Func<Task> act = () => _store.DeleteAsync(_identity, TestContext.Current.CancellationToken);
 
         await act.Should().NotThrowAsync();
     }
@@ -328,7 +328,7 @@ public sealed class FileSystemPackageStoreTests : IDisposable
     [Fact]
     public async Task ListAllAsync_EmptyStore_ReturnsEmptyList()
     {
-        IReadOnlyList<PackageIdentity> result = await _store.ListAllAsync(CancellationToken.None);
+        IReadOnlyList<PackageIdentity> result = await _store.ListAllAsync(TestContext.Current.CancellationToken);
 
         result.Should().BeEmpty();
     }
@@ -338,9 +338,9 @@ public sealed class FileSystemPackageStoreTests : IDisposable
     {
         using MemoryStream nupkg = MakeStream("fake-nupkg-content");
         using MemoryStream nuspec = MakeStream("<package />");
-        await _store.StoreAsync(_identity, nupkg, nuspec, CancellationToken.None);
+        await _store.StoreAsync(_identity, nupkg, nuspec, TestContext.Current.CancellationToken);
 
-        IReadOnlyList<PackageIdentity> result = await _store.ListAllAsync(CancellationToken.None);
+        IReadOnlyList<PackageIdentity> result = await _store.ListAllAsync(TestContext.Current.CancellationToken);
 
         result.Should().ContainSingle();
     }
@@ -352,9 +352,9 @@ public sealed class FileSystemPackageStoreTests : IDisposable
         var mixedCaseIdentity = new PackageIdentity("Serilog", "3.1.1");
         using MemoryStream nupkg = MakeStream("content");
         using MemoryStream nuspec = MakeStream("<package />");
-        await _store.StoreAsync(mixedCaseIdentity, nupkg, nuspec, CancellationToken.None);
+        await _store.StoreAsync(mixedCaseIdentity, nupkg, nuspec, TestContext.Current.CancellationToken);
 
-        IReadOnlyList<PackageIdentity> result = await _store.ListAllAsync(CancellationToken.None);
+        IReadOnlyList<PackageIdentity> result = await _store.ListAllAsync(TestContext.Current.CancellationToken);
 
         PackageIdentity identity = result.Should().ContainSingle().Which;
         identity.Id.Should().Be("serilog");
@@ -368,13 +368,13 @@ public sealed class FileSystemPackageStoreTests : IDisposable
 
         using MemoryStream nupkg1 = MakeStream("content1");
         using MemoryStream nuspec1 = MakeStream("<package />");
-        await _store.StoreAsync(_identity, nupkg1, nuspec1, CancellationToken.None);
+        await _store.StoreAsync(_identity, nupkg1, nuspec1, TestContext.Current.CancellationToken);
 
         using MemoryStream nupkg2 = MakeStream("content2");
         using MemoryStream nuspec2 = MakeStream("<package />");
-        await _store.StoreAsync(second, nupkg2, nuspec2, CancellationToken.None);
+        await _store.StoreAsync(second, nupkg2, nuspec2, TestContext.Current.CancellationToken);
 
-        IReadOnlyList<PackageIdentity> result = await _store.ListAllAsync(CancellationToken.None);
+        IReadOnlyList<PackageIdentity> result = await _store.ListAllAsync(TestContext.Current.CancellationToken);
 
         result.Should().HaveCount(2);
     }
@@ -386,7 +386,7 @@ public sealed class FileSystemPackageStoreTests : IDisposable
         string incompleteDir = Path.Combine(_tempDir, "orphanlib", "1.0.0");
         Directory.CreateDirectory(incompleteDir);
 
-        IReadOnlyList<PackageIdentity> result = await _store.ListAllAsync(CancellationToken.None);
+        IReadOnlyList<PackageIdentity> result = await _store.ListAllAsync(TestContext.Current.CancellationToken);
 
         result.Should().BeEmpty();
     }
@@ -396,14 +396,14 @@ public sealed class FileSystemPackageStoreTests : IDisposable
     {
         using MemoryStream nupkg = MakeStream("fake-nupkg-content");
         using MemoryStream nuspec = MakeStream("<package />");
-        await _store.StoreAsync(_identity, nupkg, nuspec, CancellationToken.None);
+        await _store.StoreAsync(_identity, nupkg, nuspec, TestContext.Current.CancellationToken);
 
         string id = _identity.Id.ToLowerInvariant();
         string version = _identity.Version.ToLowerInvariant();
         string nuspecPath = Path.Combine(_tempDir, id, version, $"{id}.{version}.nuspec");
         File.Delete(nuspecPath);
 
-        Func<Task> act = () => _store.GetMetadataAsync(_identity, CancellationToken.None);
+        Func<Task> act = () => _store.GetMetadataAsync(_identity, TestContext.Current.CancellationToken);
 
         await act.Should().ThrowAsync<PackageIntegrityException>();
     }
@@ -413,14 +413,14 @@ public sealed class FileSystemPackageStoreTests : IDisposable
     {
         using MemoryStream nupkg = MakeStream("fake-nupkg-content");
         using MemoryStream nuspec = MakeStream("<package />");
-        await _store.StoreAsync(_identity, nupkg, nuspec, CancellationToken.None);
+        await _store.StoreAsync(_identity, nupkg, nuspec, TestContext.Current.CancellationToken);
 
         string id = _identity.Id.ToLowerInvariant();
         string version = _identity.Version.ToLowerInvariant();
         string sha512Path = Path.Combine(_tempDir, id, version, $"{id}.{version}.sha512");
         File.Delete(sha512Path);
 
-        Func<Task> act = () => _store.GetMetadataAsync(_identity, CancellationToken.None);
+        Func<Task> act = () => _store.GetMetadataAsync(_identity, TestContext.Current.CancellationToken);
 
         await act.Should().ThrowAsync<PackageIntegrityException>();
     }
@@ -432,9 +432,9 @@ public sealed class FileSystemPackageStoreTests : IDisposable
     {
         using MemoryStream nupkg = MakeStream("fake-nupkg-content");
         using MemoryStream nuspec = MakeStream("<package />");
-        await _store.StoreAsync(_identity, nupkg, nuspec, CancellationToken.None);
+        await _store.StoreAsync(_identity, nupkg, nuspec, TestContext.Current.CancellationToken);
 
-        string? hash = await _store.GetStoredHashAsync(_identity, CancellationToken.None);
+        string? hash = await _store.GetStoredHashAsync(_identity, TestContext.Current.CancellationToken);
 
         hash.Should().NotBeNullOrEmpty();
     }
@@ -442,7 +442,7 @@ public sealed class FileSystemPackageStoreTests : IDisposable
     [Fact]
     public async Task GetStoredHashAsync_MissingPackage_ReturnsNull()
     {
-        string? hash = await _store.GetStoredHashAsync(_identity, CancellationToken.None);
+        string? hash = await _store.GetStoredHashAsync(_identity, TestContext.Current.CancellationToken);
 
         hash.Should().BeNull();
     }
@@ -452,14 +452,14 @@ public sealed class FileSystemPackageStoreTests : IDisposable
     {
         using MemoryStream nupkg = MakeStream("fake-nupkg-content");
         using MemoryStream nuspec = MakeStream("<package />");
-        await _store.StoreAsync(_identity, nupkg, nuspec, CancellationToken.None);
+        await _store.StoreAsync(_identity, nupkg, nuspec, TestContext.Current.CancellationToken);
 
         string id = _identity.Id.ToLowerInvariant();
         string version = _identity.Version.ToLowerInvariant();
         string sha512Path = Path.Combine(_tempDir, id, version, $"{id}.{version}.sha512");
         File.Delete(sha512Path);
 
-        Func<Task> act = () => _store.GetStoredHashAsync(_identity, CancellationToken.None);
+        Func<Task> act = () => _store.GetStoredHashAsync(_identity, TestContext.Current.CancellationToken);
 
         await act.Should().ThrowAsync<PackageIntegrityException>();
     }
@@ -472,9 +472,9 @@ public sealed class FileSystemPackageStoreTests : IDisposable
 
         using MemoryStream nupkg = new(nupkgBytes);
         using MemoryStream nuspec = MakeStream("<package />");
-        await _store.StoreAsync(_identity, nupkg, nuspec, CancellationToken.None);
+        await _store.StoreAsync(_identity, nupkg, nuspec, TestContext.Current.CancellationToken);
 
-        string? hash = await _store.GetStoredHashAsync(_identity, CancellationToken.None);
+        string? hash = await _store.GetStoredHashAsync(_identity, TestContext.Current.CancellationToken);
 
         hash.Should().Be(expectedHash);
     }

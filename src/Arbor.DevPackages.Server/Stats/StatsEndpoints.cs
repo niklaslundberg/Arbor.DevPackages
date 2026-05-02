@@ -20,11 +20,11 @@ public static class StatsEndpoints
         var allStats = await statisticsReader.GetAllPackageStatsAsync(cancellationToken);
 
         var packages = allStats
-            .Select(s => new StatsPackageEntry(
-                Id: s.Identity.Id,
-                Version: s.Identity.Version,
-                DownloadCount: s.DownloadCount,
-                LastDownloadedAt: s.LastDownloadedAt))
+            .Select(stat => new StatsPackageEntry(
+                Id: stat.Identity.Id,
+                Version: stat.Identity.Version,
+                DownloadCount: stat.DownloadCount,
+                LastDownloadedAt: stat.LastDownloadedAt))
             .ToArray();
 
         return Results.Json(new StatsResponse(Packages: packages));

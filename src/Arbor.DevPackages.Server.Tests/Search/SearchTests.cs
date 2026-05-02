@@ -30,8 +30,8 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
 
     private WebApplicationFactory<Program> BuildFactory(IUpstreamSearchCache cache)
     {
-        return _factory.WithWebHostBuilder(b =>
-            b.ConfigureServices(services =>
+        return _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
             {
                 services.AddSingleton(cache);
             }));
@@ -41,8 +41,8 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
         IUpstreamSearchCache cache,
         IFeedRouter feedRouter)
     {
-        return _factory.WithWebHostBuilder(b =>
-            b.ConfigureServices(services =>
+        return _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
             {
                 services.AddSingleton(cache);
                 services.AddSingleton(feedRouter);
@@ -101,11 +101,11 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
         using var factory = BuildFactory(new FakeUpstreamSearchCache(entries));
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/feeds/default/v3/search?q=serilog");
+        var response = await client.GetAsync("/feeds/default/v3/search?q=serilog", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(json);
 
         var totalHits = doc.RootElement.GetProperty("totalHits").GetInt32();
@@ -133,18 +133,18 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
         using var factory = BuildFactory(new FakeUpstreamSearchCache(entries));
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/feeds/default/v3/search?prerelease=true");
+        var response = await client.GetAsync("/feeds/default/v3/search?prerelease=true", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(json);
 
         doc.RootElement.GetProperty("totalHits").GetInt32().Should().Be(2);
 
         var ids = doc.RootElement.GetProperty("data")
             .EnumerateArray()
-            .Select(e => e.GetProperty("id").GetString())
+            .Select(element => element.GetProperty("id").GetString())
             .ToList();
 
         ids.Should().Contain("Serilog.Sinks.File");
@@ -168,18 +168,18 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
         var client = factory.CreateClient();
 
         // prerelease=false is the default; include it explicitly for clarity.
-        var response = await client.GetAsync("/feeds/default/v3/search?prerelease=false");
+        var response = await client.GetAsync("/feeds/default/v3/search?prerelease=false", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(json);
 
         doc.RootElement.GetProperty("totalHits").GetInt32().Should().Be(1);
 
         var ids = doc.RootElement.GetProperty("data")
             .EnumerateArray()
-            .Select(e => e.GetProperty("id").GetString())
+            .Select(element => element.GetProperty("id").GetString())
             .ToList();
 
         ids.Should().NotContain("Serilog.Sinks.File");
@@ -197,18 +197,18 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
         using var factory = BuildFactory(new FakeUpstreamSearchCache(cachedEntries));
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/feeds/default/v3/search?prerelease=true");
+        var response = await client.GetAsync("/feeds/default/v3/search?prerelease=true", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(json);
 
         doc.RootElement.GetProperty("totalHits").GetInt32().Should().BeGreaterThan(0);
 
         var ids = doc.RootElement.GetProperty("data")
             .EnumerateArray()
-            .Select(e => e.GetProperty("id").GetString())
+            .Select(element => element.GetProperty("id").GetString())
             .ToList();
 
         ids.Should().Contain("Serilog");
@@ -223,7 +223,7 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
         var client = factory.CreateClient();
 
         var response = await client.PostAsync(
-            "/api/feeds/default/search-cache/refresh", content: null);
+            "/api/feeds/default/search-cache/refresh", content: null, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
@@ -249,18 +249,18 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
         using var factory = BuildFactory(new FakeUpstreamSearchCache(entries), feedRouter);
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/feeds/default/v3/search?prerelease=true");
+        var response = await client.GetAsync("/feeds/default/v3/search?prerelease=true", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(json);
 
         doc.RootElement.GetProperty("totalHits").GetInt32().Should().Be(2);
 
         var ids = doc.RootElement.GetProperty("data")
             .EnumerateArray()
-            .Select(e => e.GetProperty("id").GetString())
+            .Select(element => element.GetProperty("id").GetString())
             .ToList();
 
         ids.Should().Contain("Serilog.Sinks.File");
@@ -287,18 +287,18 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
         var client = factory.CreateClient();
 
         // Even though the client requests prerelease=true, the feed disallows it.
-        var response = await client.GetAsync("/feeds/default/v3/search?prerelease=true");
+        var response = await client.GetAsync("/feeds/default/v3/search?prerelease=true", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(json);
 
         doc.RootElement.GetProperty("totalHits").GetInt32().Should().Be(1);
 
         var ids = doc.RootElement.GetProperty("data")
             .EnumerateArray()
-            .Select(e => e.GetProperty("id").GetString())
+            .Select(element => element.GetProperty("id").GetString())
             .ToList();
 
         ids.Should().NotContain("Serilog.Sinks.File");
@@ -336,7 +336,7 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
             ServiceIndexEndpoints.MapServiceIndex(feedsGroup);
             SearchEndpoints.MapSearch(feedsGroup);
 
-            await app.StartAsync();
+            await app.StartAsync(TestContext.Current.CancellationToken);
 
             try
             {
@@ -347,7 +347,7 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
                 var source = new PackageSource(indexUrl);
                 var repository = Repository.Factory.GetCoreV3(source);
 
-                var resource = await repository.GetResourceAsync<PackageSearchResource>(CancellationToken.None);
+                var resource = await repository.GetResourceAsync<PackageSearchResource>(TestContext.Current.CancellationToken);
 
                 var results = await resource.SearchAsync(
                     "Serilog",
@@ -355,15 +355,15 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
                     skip: 0,
                     take: 10,
                     NullLogger.Instance,
-                    CancellationToken.None);
+                    TestContext.Current.CancellationToken);
 
                 var packages = results.ToList();
-                packages.Should().ContainSingle(p =>
-                    p.Identity.Id.Equals("Serilog", StringComparison.OrdinalIgnoreCase));
+                packages.Should().ContainSingle(package =>
+                    package.Identity.Id.Equals("Serilog", StringComparison.OrdinalIgnoreCase));
             }
             finally
             {
-                await app.StopAsync();
+                await app.StopAsync(TestContext.Current.CancellationToken);
             }
         }
         finally
@@ -386,16 +386,16 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
         using var factory = BuildFactory(new FakeUpstreamSearchCache(entries));
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/feeds/default/v3/search?q=structured+logging");
+        var response = await client.GetAsync("/feeds/default/v3/search?q=structured+logging", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(json);
 
         var ids = doc.RootElement.GetProperty("data")
             .EnumerateArray()
-            .Select(e => e.GetProperty("id").GetString())
+            .Select(element => element.GetProperty("id").GetString())
             .ToList();
 
         ids.Should().Contain("Serilog");
@@ -420,11 +420,11 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
         using var factory = BuildFactory(new FakeUpstreamSearchCache(entries));
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/feeds/default/v3/search?prerelease=false");
+        var response = await client.GetAsync("/feeds/default/v3/search?prerelease=false", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(json);
 
         doc.RootElement.GetProperty("totalHits").GetInt32().Should().Be(1);
@@ -449,11 +449,11 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
         using var factory = BuildFactory(new FakeUpstreamSearchCache(entries));
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/feeds/default/v3/search?prerelease=false");
+        var response = await client.GetAsync("/feeds/default/v3/search?prerelease=false", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(json);
 
         doc.RootElement.GetProperty("totalHits").GetInt32().Should().Be(0);
@@ -466,11 +466,11 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
         using var factory = BuildFactory(new FakeUpstreamSearchCache(entries: null));
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/feeds/default/v3/search");
+        var response = await client.GetAsync("/feeds/default/v3/search", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(json);
 
         doc.RootElement.GetProperty("totalHits").GetInt32().Should().Be(0);
@@ -482,7 +482,7 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
         using var factory = BuildFactory(new FakeUpstreamSearchCache([]));
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/feeds/nonexistent/v3/search");
+        var response = await client.GetAsync("/feeds/nonexistent/v3/search", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -491,17 +491,17 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
     public async Task Search_WithSkipAndTake_ReturnsPaginatedSubset()
     {
         var entries = Enumerable.Range(1, 10)
-            .Select(i => BuildPackage($"Package{i:D2}", "1.0.0"))
+            .Select(index => BuildPackage($"Package{index:D2}", "1.0.0"))
             .ToArray();
 
         using var factory = BuildFactory(new FakeUpstreamSearchCache(entries));
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/feeds/default/v3/search?skip=3&take=4");
+        var response = await client.GetAsync("/feeds/default/v3/search?skip=3&take=4", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(json);
 
         // totalHits reflects the total matching count (10), not the page size.

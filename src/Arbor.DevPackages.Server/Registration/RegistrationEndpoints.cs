@@ -35,8 +35,8 @@ public static class RegistrationEndpoints
 
         var all = await store.ListAllAsync(cancellationToken);
         var identities = all
-            .Where(p => string.Equals(p.Id, id, StringComparison.Ordinal))
-            .OrderBy(p => p.Version, SemVerComparer.Instance)
+            .Where(identity => string.Equals(identity.Id, id, StringComparison.Ordinal))
+            .OrderBy(identity => identity.Version, SemVerComparer.Instance)
             .ToArray();
 
         if (identities.Length == 0)
@@ -48,7 +48,7 @@ public static class RegistrationEndpoints
         foreach (var identity in identities)
         {
             var metadata = await store.GetMetadataAsync(identity, cancellationToken);
-            if (metadata is not null)
+            if (metadata is { })
             {
                 metadataItems.Add(metadata);
             }

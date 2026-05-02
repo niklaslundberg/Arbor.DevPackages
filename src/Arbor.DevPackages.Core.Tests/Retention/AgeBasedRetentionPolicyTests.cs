@@ -19,7 +19,7 @@ public sealed class AgeBasedRetentionPolicyTests
         FakeStatisticsReader stats = new(Package, lastDownload);
         AgeBasedRetentionPolicy policy = new(RetentionOptions.Default, stats, new FakeTimeProvider(now));
 
-        RetentionDecision decision = await policy.EvaluateAsync(Package, CancellationToken.None);
+        RetentionDecision decision = await policy.EvaluateAsync(Package, TestContext.Current.CancellationToken);
 
         decision.Action.Should().Be(RetentionAction.Purge);
     }
@@ -33,7 +33,7 @@ public sealed class AgeBasedRetentionPolicyTests
         FakeStatisticsReader stats = new(Package, lastDownload);
         AgeBasedRetentionPolicy policy = new(RetentionOptions.Default, stats, new FakeTimeProvider(now));
 
-        RetentionDecision decision = await policy.EvaluateAsync(Package, CancellationToken.None);
+        RetentionDecision decision = await policy.EvaluateAsync(Package, TestContext.Current.CancellationToken);
 
         decision.Action.Should().Be(RetentionAction.Keep);
     }
@@ -46,7 +46,7 @@ public sealed class AgeBasedRetentionPolicyTests
         FakeStatisticsReader stats = new(Package, lastDownloadedAt: null);
         AgeBasedRetentionPolicy policy = new(RetentionOptions.Default, stats, new FakeTimeProvider(now));
 
-        RetentionDecision decision = await policy.EvaluateAsync(Package, CancellationToken.None);
+        RetentionDecision decision = await policy.EvaluateAsync(Package, TestContext.Current.CancellationToken);
 
         decision.Action.Should().Be(RetentionAction.Purge);
     }
@@ -65,7 +65,7 @@ public sealed class AgeBasedRetentionPolicyTests
         FakeStatisticsReader stats = new(Package, lastDownload);
         AgeBasedRetentionPolicy policy = new(RetentionOptions.Default, stats, new FakeTimeProvider(now));
 
-        RetentionDecision decision = await policy.EvaluateAsync(Package, CancellationToken.None);
+        RetentionDecision decision = await policy.EvaluateAsync(Package, TestContext.Current.CancellationToken);
 
         decision.Action.Should().Be(RetentionAction.Purge);
     }
@@ -82,7 +82,7 @@ public sealed class AgeBasedRetentionPolicyTests
         FakeStatisticsReader stats = new(Package, lastDownload);
         AgeBasedRetentionPolicy policy = new(RetentionOptions.Default, stats, new FakeTimeProvider(now));
 
-        RetentionDecision decision = await policy.EvaluateAsync(Package, CancellationToken.None);
+        RetentionDecision decision = await policy.EvaluateAsync(Package, TestContext.Current.CancellationToken);
 
         decision.Action.Should().Be(RetentionAction.Keep);
     }

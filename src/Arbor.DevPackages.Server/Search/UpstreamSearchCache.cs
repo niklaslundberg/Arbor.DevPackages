@@ -53,7 +53,7 @@ public sealed class UpstreamSearchCache : BackgroundService, IUpstreamSearchCach
             var result = await response.Content.ReadFromJsonAsync<SearchQueryResponse>(
                 cancellationToken: cancellationToken);
 
-            if (result?.Data is not null)
+            if (result?.Data is { })
             {
                 _cachedEntries = result.Data;
                 _logger.LogInformation(

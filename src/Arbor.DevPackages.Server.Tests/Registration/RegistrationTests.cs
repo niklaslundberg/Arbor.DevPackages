@@ -47,8 +47,8 @@ public sealed class RegistrationTests : IClassFixture<WebApplicationFactory<Prog
     {
         var packageStore = store ?? new InMemoryPackageStore();
 
-        return _factory.WithWebHostBuilder(b =>
-            b.ConfigureServices(services =>
+        return _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
             {
                 services.AddSingleton<IPackageStore>(packageStore);
                 services.AddSingleton<IStatisticsCollector, NoOpTestStatisticsCollector>();
@@ -70,11 +70,11 @@ public sealed class RegistrationTests : IClassFixture<WebApplicationFactory<Prog
         using var factory = BuildFactory(StoreWithTestPackage());
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/feeds/default/v3/registration/serilog/index.json");
+        var response = await client.GetAsync("/feeds/default/v3/registration/serilog/index.json", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
@@ -104,7 +104,7 @@ public sealed class RegistrationTests : IClassFixture<WebApplicationFactory<Prog
         using var factory = BuildFactory();
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/feeds/default/v3/registration/unknown-package/index.json");
+        var response = await client.GetAsync("/feeds/default/v3/registration/unknown-package/index.json", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -121,11 +121,11 @@ public sealed class RegistrationTests : IClassFixture<WebApplicationFactory<Prog
         using var factory = BuildFactory(store);
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/feeds/default/v3/registration/serilog/index.json");
+        var response = await client.GetAsync("/feeds/default/v3/registration/serilog/index.json", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(json);
         var page = doc.RootElement.GetProperty("items")[0];
 
@@ -148,11 +148,11 @@ public sealed class RegistrationTests : IClassFixture<WebApplicationFactory<Prog
         using var factory = BuildFactory(StoreWithTestPackage());
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/feeds/default/v3/registration/serilog/3.1.1.json");
+        var response = await client.GetAsync("/feeds/default/v3/registration/serilog/3.1.1.json", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
@@ -172,7 +172,7 @@ public sealed class RegistrationTests : IClassFixture<WebApplicationFactory<Prog
         using var factory = BuildFactory();
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/feeds/default/v3/registration/unknown-package/1.0.0.json");
+        var response = await client.GetAsync("/feeds/default/v3/registration/unknown-package/1.0.0.json", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -216,7 +216,7 @@ public sealed class RegistrationTests : IClassFixture<WebApplicationFactory<Prog
         FlatContainerEndpoints.MapFlatContainer(feedsGroup);
         RegistrationEndpoints.MapRegistration(feedsGroup);
 
-        await app.StartAsync();
+        await app.StartAsync(TestContext.Current.CancellationToken);
 
         try
         {
@@ -228,19 +228,19 @@ public sealed class RegistrationTests : IClassFixture<WebApplicationFactory<Prog
             var repository = Repository.Factory.GetCoreV3(source);
 
             using var cache = new SourceCacheContext { NoCache = true };
-            var resource = await repository.GetResourceAsync<PackageMetadataResource>(CancellationToken.None);
+            var resource = await repository.GetResourceAsync<PackageMetadataResource>(TestContext.Current.CancellationToken);
 
             var metadata = await resource.GetMetadataAsync(
                 "serilog", includePrerelease: false, includeUnlisted: false,
-                cache, NullLogger.Instance, CancellationToken.None);
+                cache, NullLogger.Instance, TestContext.Current.CancellationToken);
 
             var packages = metadata.ToList();
-            packages.Should().ContainSingle(p =>
-                p.Identity.Id == "serilog" && p.Identity.Version.ToString() == "3.1.1");
+            packages.Should().ContainSingle(package =>
+                package.Identity.Id == "serilog" && package.Identity.Version.ToString() == "3.1.1");
         }
         finally
         {
-            await app.StopAsync();
+            await app.StopAsync(TestContext.Current.CancellationToken);
         }
     }
 

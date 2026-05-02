@@ -31,7 +31,7 @@ public sealed class RestoreSystemTests
         };
         await fixture.InitializeAsync();
 
-        var result = await NuGetRestoreRunner.RunAsync(fixture.Port);
+        var result = await NuGetRestoreRunner.RunAsync(fixture.Port, TestContext.Current.CancellationToken);
 
         // The restore must succeed.
         result.ExitCode.Should().Be(
@@ -63,7 +63,7 @@ public sealed class RestoreSystemTests
         };
         await fixture.InitializeAsync();
 
-        var result = await NuGetRestoreRunner.RunAsync(fixture.Port);
+        var result = await NuGetRestoreRunner.RunAsync(fixture.Port, TestContext.Current.CancellationToken);
 
         result.ExitCode.Should().Be(
             0,

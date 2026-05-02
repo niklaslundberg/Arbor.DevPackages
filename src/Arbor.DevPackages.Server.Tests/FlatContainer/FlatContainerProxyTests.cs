@@ -39,18 +39,18 @@ public sealed class FlatContainerProxyTests : IClassFixture<WebApplicationFactor
         FakeUpstreamProxy? upstreamProxy = null)
     {
         var packageStore = store ?? new InMemoryPackageStore();
-        return _factory.WithWebHostBuilder(b =>
-            b.ConfigureServices(services =>
+        return _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
             {
                 services.AddSingleton<IPackageStore>(packageStore);
                 services.AddSingleton<IStatisticsCollector>(new RecordingStatisticsCollector());
 
-                if (probe is not null)
+                if (probe is { })
                 {
                     services.AddSingleton<IConnectivityProbe>(probe);
                 }
 
-                if (upstreamProxy is not null)
+                if (upstreamProxy is { })
                 {
                     services.AddSingleton<IUpstreamProxy>(upstreamProxy);
                 }
@@ -79,12 +79,12 @@ public sealed class FlatContainerProxyTests : IClassFixture<WebApplicationFactor
 
         // Act
         var response = await client.GetAsync(
-            "/feeds/default/v3/flatcontainer/testpkg/1.0.0/testpkg.1.0.0.nupkg");
+            "/feeds/default/v3/flatcontainer/testpkg/1.0.0/testpkg.1.0.0.nupkg", TestContext.Current.CancellationToken);
 
         // Assert: package should be fetched from upstream and served.
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         response.Content.Headers.ContentType?.MediaType.Should().Be("application/octet-stream");
-        var bytes = await response.Content.ReadAsByteArrayAsync();
+        var bytes = await response.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken);
         bytes.Should().BeEquivalentTo(TestNupkg);
     }
 
@@ -102,7 +102,7 @@ public sealed class FlatContainerProxyTests : IClassFixture<WebApplicationFactor
 
         // Act
         var response = await client.GetAsync(
-            "/feeds/default/v3/flatcontainer/testpkg/1.0.0/testpkg.1.0.0.nupkg");
+            "/feeds/default/v3/flatcontainer/testpkg/1.0.0/testpkg.1.0.0.nupkg", TestContext.Current.CancellationToken);
 
         // Assert: 404 while the upstream is within its back-off window.
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -126,7 +126,7 @@ public sealed class FlatContainerProxyTests : IClassFixture<WebApplicationFactor
 
         // Act
         var response = await client.GetAsync(
-            "/feeds/default/v3/flatcontainer/testpkg/1.0.0/testpkg.1.0.0.nupkg");
+            "/feeds/default/v3/flatcontainer/testpkg/1.0.0/testpkg.1.0.0.nupkg", TestContext.Current.CancellationToken);
 
         // Assert: 502 is returned and the upstream is marked offline.
         response.StatusCode.Should().Be(HttpStatusCode.BadGateway);

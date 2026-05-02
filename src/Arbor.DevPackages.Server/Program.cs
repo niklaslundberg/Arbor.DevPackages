@@ -47,11 +47,11 @@ if (feedsSection.Exists())
     {
         var id = section["Id"] ?? throw new InvalidOperationException("Each feed entry requires an 'Id'.");
         var urlString = section["UpstreamUrl"];
-        var upstreamUrl = urlString is not null ? new Uri(urlString) : null;
+        var upstreamUrl = urlString is { } ? new Uri(urlString) : null;
         var allowPrerelease = section.GetValue<bool>("AllowPrerelease");
         var allowPush = section.GetValue<bool>("AllowPush");
         var searchUrlString = section["SearchUrl"];
-        var searchUrl = searchUrlString is not null ? new Uri(searchUrlString) : null;
+        var searchUrl = searchUrlString is { } ? new Uri(searchUrlString) : null;
         feeds.Add(new FeedConfiguration(id, upstreamUrl, AllowPrerelease: allowPrerelease, AllowPush: allowPush, SearchUrl: searchUrl));
     }
 }
@@ -64,7 +64,7 @@ if (feeds.Count == 0)
     var upstreamFeedUrl = builder.Configuration["UpstreamFeedUrl"]
         ?? "https://api.nuget.org/v3/flatcontainer";
     var upstreamSearchUrlString = builder.Configuration["UpstreamSearchUrl"];
-    var upstreamSearchUrl = upstreamSearchUrlString is not null ? new Uri(upstreamSearchUrlString) : null;
+    var upstreamSearchUrl = upstreamSearchUrlString is { } ? new Uri(upstreamSearchUrlString) : null;
     feeds.Add(new FeedConfiguration("default", new Uri(upstreamFeedUrl), AllowPrerelease: true, SearchUrl: upstreamSearchUrl));
 }
 

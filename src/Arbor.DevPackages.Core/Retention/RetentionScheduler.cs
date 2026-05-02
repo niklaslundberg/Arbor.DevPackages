@@ -69,7 +69,7 @@ public sealed class RetentionScheduler : BackgroundService, IRetentionScheduler
         DateTimeOffset? lastDownloadAt =
             await _statisticsReader.GetLastDownloadedAtAcrossAllPackagesAsync(cancellationToken);
 
-        if (lastDownloadAt is not null)
+        if (lastDownloadAt is { })
         {
             TimeSpan timeSinceLastDownload = _timeProvider.GetUtcNow() - lastDownloadAt.Value;
             if (timeSinceLastDownload < _options.InactivityThreshold)
@@ -109,7 +109,7 @@ public sealed class RetentionScheduler : BackgroundService, IRetentionScheduler
             "Retention run: {Count} package(s) scheduled for purge:{NewLine}{Candidates}",
             candidates.Count,
             Environment.NewLine,
-            string.Join(Environment.NewLine, candidates.Select(c => $"  {c.Identity.Id} {c.Identity.Version} — {c.Reason}")));
+            string.Join(Environment.NewLine, candidates.Select(candidate => $"  {candidate.Identity.Id} {candidate.Identity.Version} — {candidate.Reason}")));
 
         foreach ((PackageIdentity identity, _) in candidates)
         {

@@ -27,7 +27,7 @@ public sealed class StartPageEndpointTests : IClassFixture<WebApplicationFactory
     {
         var client = _factory.CreateClient();
 
-        var response = await client.GetAsync("/");
+        var response = await client.GetAsync("/", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         response.Content.Headers.ContentType?.MediaType.Should().Be("text/html");
@@ -42,8 +42,8 @@ public sealed class StartPageEndpointTests : IClassFixture<WebApplicationFactory
         var upstreamUrl = new Uri("https://api.nuget.org/v3/index.json");
         var feed = new FeedConfiguration(feedId, upstreamUrl, AllowPrerelease: true, AllowPush: false);
 
-        using var factory = _factory.WithWebHostBuilder(b =>
-            b.ConfigureServices(services =>
+        using var factory = _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
             {
                 services.AddSingleton<IReadOnlyList<FeedConfiguration>>([feed]);
                 services.AddSingleton<IFeedRouter>(new Arbor.DevPackages.Core.Feeds.FeedRouter([feed]));
@@ -51,8 +51,8 @@ public sealed class StartPageEndpointTests : IClassFixture<WebApplicationFactory
 
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/");
-        var html = await response.Content.ReadAsStringAsync();
+        var response = await client.GetAsync("/", TestContext.Current.CancellationToken);
+        var html = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         html.Should().Contain($"/feeds/{feedId}/v3/index.json");
         html.Should().Contain(feedId);
@@ -66,8 +66,8 @@ public sealed class StartPageEndpointTests : IClassFixture<WebApplicationFactory
         var upstreamUrl = new Uri("https://api.nuget.org/v3/index.json");
         var feed = new FeedConfiguration("myproxy", upstreamUrl);
 
-        using var factory = _factory.WithWebHostBuilder(b =>
-            b.ConfigureServices(services =>
+        using var factory = _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
             {
                 services.AddSingleton<IReadOnlyList<FeedConfiguration>>([feed]);
                 services.AddSingleton<IFeedRouter>(new Arbor.DevPackages.Core.Feeds.FeedRouter([feed]));
@@ -75,8 +75,8 @@ public sealed class StartPageEndpointTests : IClassFixture<WebApplicationFactory
 
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/");
-        var html = await response.Content.ReadAsStringAsync();
+        var response = await client.GetAsync("/", TestContext.Current.CancellationToken);
+        var html = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         html.Should().Contain(upstreamUrl.ToString());
     }
@@ -86,16 +86,16 @@ public sealed class StartPageEndpointTests : IClassFixture<WebApplicationFactory
     [Fact]
     public async Task GetStartPage_WithNoDownloads_ShowsNoDownloadsMessage()
     {
-        using var factory = _factory.WithWebHostBuilder(b =>
-            b.ConfigureServices(services =>
+        using var factory = _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
             {
                 services.AddSingleton<IStatisticsReader>(new FakeStatisticsReader([]));
             }));
 
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/");
-        var html = await response.Content.ReadAsStringAsync();
+        var response = await client.GetAsync("/", TestContext.Current.CancellationToken);
+        var html = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         html.Should().Contain("No downloads recorded yet.");
     }
@@ -109,16 +109,16 @@ public sealed class StartPageEndpointTests : IClassFixture<WebApplicationFactory
         var lastDownloadedAt = new DateTimeOffset(2026, 4, 29, 10, 0, 0, TimeSpan.Zero);
         var summary = new PackageStatsSummary(identity, DownloadCount: 7, LastDownloadedAt: lastDownloadedAt);
 
-        using var factory = _factory.WithWebHostBuilder(b =>
-            b.ConfigureServices(services =>
+        using var factory = _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
             {
                 services.AddSingleton<IStatisticsReader>(new FakeStatisticsReader([summary]));
             }));
 
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/");
-        var html = await response.Content.ReadAsStringAsync();
+        var response = await client.GetAsync("/", TestContext.Current.CancellationToken);
+        var html = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         html.Should().Contain("Newtonsoft.Json");
         html.Should().Contain("13.0.3");

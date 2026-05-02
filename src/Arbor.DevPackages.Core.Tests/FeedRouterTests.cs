@@ -14,7 +14,7 @@ public class FeedRouterTests
         var feed = new FeedConfiguration("nuget-org", NuGetOrg, AllowPrerelease: false);
         var router = new FeedRouter([feed]);
 
-        var result = await router.RouteAsync("nuget-org", CancellationToken.None);
+        var result = await router.RouteAsync("nuget-org", TestContext.Current.CancellationToken);
 
         result.Should().NotBeNull();
         result!.FeedId.Should().Be("nuget-org");
@@ -27,7 +27,7 @@ public class FeedRouterTests
         var feed = new FeedConfiguration("MyFeed", NuGetOrg);
         var router = new FeedRouter([feed]);
 
-        var result = await router.RouteAsync("myfeed", CancellationToken.None);
+        var result = await router.RouteAsync("myfeed", TestContext.Current.CancellationToken);
 
         result.Should().NotBeNull();
         result!.FeedId.Should().Be("MyFeed");
@@ -39,7 +39,7 @@ public class FeedRouterTests
         var feed = new FeedConfiguration("nuget-org", NuGetOrg);
         var router = new FeedRouter([feed]);
 
-        var result = await router.RouteAsync("nonexistent", CancellationToken.None);
+        var result = await router.RouteAsync("nonexistent", TestContext.Current.CancellationToken);
 
         result.Should().BeNull();
     }
@@ -54,8 +54,8 @@ public class FeedRouterTests
         };
         var router = new FeedRouter(feeds);
 
-        var resultA = await router.RouteAsync("feed-a", CancellationToken.None);
-        var resultB = await router.RouteAsync("feed-b", CancellationToken.None);
+        var resultA = await router.RouteAsync("feed-a", TestContext.Current.CancellationToken);
+        var resultB = await router.RouteAsync("feed-b", TestContext.Current.CancellationToken);
 
         resultA.Should().NotBeNull();
         resultA!.AllowPrerelease.Should().BeTrue();

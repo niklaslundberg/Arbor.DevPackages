@@ -42,8 +42,8 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
     {
         var packageStore = store ?? new InMemoryPackageStore();
 
-        return _factory.WithWebHostBuilder(b =>
-            b.ConfigureServices(services =>
+        return _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
             {
                 services.AddSingleton<IPackageStore>(packageStore);
                 services.AddSingleton<IStatisticsCollector>(new RecordingStatisticsCollector());
@@ -87,12 +87,12 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
         var nupkgBytes = CreateNupkgBytes(TestNuspec);
         using var content = CreatePushContent(nupkgBytes);
 
-        var response = await client.PutAsync("/feeds/default/v3/push", content);
+        var response = await client.PutAsync("/feeds/default/v3/push", content, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);
 
         var identity = new PackageIdentity("testpackage", "1.0.0");
-        var stored = await store.ExistsAsync(identity, CancellationToken.None);
+        var stored = await store.ExistsAsync(identity, TestContext.Current.CancellationToken);
         stored.Should().BeTrue();
     }
 
@@ -110,7 +110,7 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
         var nupkgBytes = CreateNupkgBytes(TestNuspec);
         using var content = CreatePushContent(nupkgBytes);
 
-        var response = await client.PutAsync("/feeds/default/v3/push", content);
+        var response = await client.PutAsync("/feeds/default/v3/push", content, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
@@ -126,7 +126,7 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
         var nupkgBytes = CreateNupkgBytes(TestNuspec);
         using var content = CreatePushContent(nupkgBytes);
 
-        var response = await client.PutAsync("/feeds/default/v3/push", content);
+        var response = await client.PutAsync("/feeds/default/v3/push", content, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -142,7 +142,7 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
         var nupkgBytes = CreateNupkgBytes(TestNuspec);
         using var content = CreatePushContent(nupkgBytes);
 
-        var response = await client.PutAsync("/feeds/nonexistent/v3/push", content);
+        var response = await client.PutAsync("/feeds/nonexistent/v3/push", content, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -158,7 +158,7 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
         var nupkgBytes = CreateNupkgBytes(TestPrereleaseNuspec, "testpackage.1.0.0-beta.1.nuspec");
         using var content = CreatePushContent(nupkgBytes, "testpackage.1.0.0-beta.1.nupkg");
 
-        var response = await client.PutAsync("/feeds/default/v3/push", content);
+        var response = await client.PutAsync("/feeds/default/v3/push", content, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
@@ -175,12 +175,12 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
         var nupkgBytes = CreateNupkgBytes(TestPrereleaseNuspec, "testpackage.1.0.0-beta.1.nuspec");
         using var content = CreatePushContent(nupkgBytes, "testpackage.1.0.0-beta.1.nupkg");
 
-        var response = await client.PutAsync("/feeds/default/v3/push", content);
+        var response = await client.PutAsync("/feeds/default/v3/push", content, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);
 
         var identity = new PackageIdentity("testpackage", "1.0.0-beta.1");
-        var stored = await store.ExistsAsync(identity, CancellationToken.None);
+        var stored = await store.ExistsAsync(identity, TestContext.Current.CancellationToken);
         stored.Should().BeTrue();
     }
 
@@ -198,7 +198,7 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
         fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
         content.Add(fileContent, "package", "invalid.1.0.0.nupkg");
 
-        var response = await client.PutAsync("/feeds/default/v3/push", content);
+        var response = await client.PutAsync("/feeds/default/v3/push", content, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
@@ -225,7 +225,7 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
         fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
         content.Add(fileContent, "package", "invalid.1.0.0.nupkg");
 
-        var response = await client.PutAsync("/feeds/default/v3/push", content);
+        var response = await client.PutAsync("/feeds/default/v3/push", content, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
@@ -242,7 +242,7 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
         using var content = new MultipartFormDataContent();
         content.Add(new StringContent("somevalue"), "notafile");
 
-        var response = await client.PutAsync("/feeds/default/v3/push", content);
+        var response = await client.PutAsync("/feeds/default/v3/push", content, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
@@ -273,7 +273,7 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
 
         // Write to a temp file so PackageUpdateResource can read it.
         var tmpNupkg = Path.Combine(Path.GetTempPath(), $"pushprotocoltest.2.0.0.{Guid.NewGuid():N}.nupkg");
-        await File.WriteAllBytesAsync(tmpNupkg, nupkgBytes);
+        await File.WriteAllBytesAsync(tmpNupkg, nupkgBytes, TestContext.Current.CancellationToken);
 
         try
         {
@@ -299,7 +299,7 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
                 ServiceIndexEndpoints.MapServiceIndex(feedsGroup);
                 PushEndpoints.MapPush(feedsGroup);
 
-                await app.StartAsync();
+                await app.StartAsync(TestContext.Current.CancellationToken);
 
                 var boundUrl = app.Urls.FirstOrDefault()
                     ?? throw new InvalidOperationException("The test server did not bind to any address.");
@@ -311,7 +311,7 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
                     var source = new PackageSource(indexUrl);
                     var repository = Repository.Factory.GetCoreV3(source);
 
-                    var pushResource = await repository.GetResourceAsync<PackageUpdateResource>(CancellationToken.None);
+                    var pushResource = await repository.GetResourceAsync<PackageUpdateResource>(TestContext.Current.CancellationToken);
 
                     await pushResource.Push(
                         packagePaths: [tmpNupkg],
@@ -328,12 +328,12 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
 
                     // Verify the package was stored.
                     var identity = new PackageIdentity("pushprotocoltest", "2.0.0");
-                    var stored = await store.ExistsAsync(identity, CancellationToken.None);
+                    var stored = await store.ExistsAsync(identity, TestContext.Current.CancellationToken);
                     stored.Should().BeTrue(because: "PackageUpdateResource.Push should have stored the package");
                 }
                 finally
                 {
-                    await app.StopAsync();
+                    await app.StopAsync(TestContext.Current.CancellationToken);
                 }
             }
             finally
