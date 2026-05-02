@@ -52,6 +52,8 @@ if (feeds.Count == 0)
 
 // Register the first feed as a singleton FeedConfiguration so that UpstreamSearchCache
 // (which depends on it for its search URL) continues to work without changes.
+// TODO: Refactor UpstreamSearchCache to be feed-aware (one cache per feed) and
+//       remove this singleton registration (Iteration 11 candidate).
 builder.Services.AddSingleton(feeds[0]);
 builder.Services.AddSingleton<IFeedRouter>(new FeedRouter(feeds));
 
