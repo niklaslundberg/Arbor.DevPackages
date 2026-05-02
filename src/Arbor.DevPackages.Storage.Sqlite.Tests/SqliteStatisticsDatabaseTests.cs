@@ -8,11 +8,18 @@ namespace Arbor.DevPackages.Storage.Sqlite.Tests;
 
 public sealed class SqliteStatisticsDatabaseTests
 {
+    // Use a unique named shared-memory database per test so that
+    // all connections opened against the same string share one in-memory store.
+    // This avoids the ":memory:" single-connection limitation while keeping
+    // tests isolated from each other.
+    private static string MakeConnectionString() =>
+        $"Data Source=stats_db_{Guid.NewGuid():N};Mode=Memory;Cache=Shared";
+
     [Fact]
     public async Task OpenAsync_WithInMemoryConnectionString_ReturnsInitializedDatabase()
     {
         await using var db = await SqliteStatisticsDatabase.OpenAsync(
-            "Data Source=:memory:", CancellationToken.None);
+            MakeConnectionString(), CancellationToken.None);
 
         db.Should().NotBeNull();
         db.Collector.Should().NotBeNull();
@@ -23,7 +30,7 @@ public sealed class SqliteStatisticsDatabaseTests
     public async Task OpenAsync_AfterOpen_CanRecordAndReadDownloads()
     {
         await using var db = await SqliteStatisticsDatabase.OpenAsync(
-            "Data Source=:memory:", CancellationToken.None);
+            MakeConnectionString(), CancellationToken.None);
 
         var identity = new PackageIdentity("TestPkg", "1.0.0");
         var timestamp = new DateTimeOffset(2026, 5, 1, 10, 0, 0, TimeSpan.Zero);
@@ -38,7 +45,7 @@ public sealed class SqliteStatisticsDatabaseTests
     public async Task OpenAsync_AppliesSchemaMigration_ReadReturnsEmptyBeforeAnyDownloads()
     {
         await using var db = await SqliteStatisticsDatabase.OpenAsync(
-            "Data Source=:memory:", CancellationToken.None);
+            MakeConnectionString(), CancellationToken.None);
 
         var identity = new PackageIdentity("NeverDownloaded", "2.0.0");
 
