@@ -317,50 +317,58 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
         };
 
         // Start a real Kestrel listener so NuGet.Protocol uses its own HTTP stack.
-        // ContentRootPath is set to a directory without appsettings.json so the
-        // Server project's Kestrel endpoint config does not override UseUrls.
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { ContentRootPath = Path.GetTempPath() });
-        builder.WebHost.UseUrls("http://127.0.0.1:0");
-        Extensions.AddServiceDefaults(builder);
-        builder.Services.AddSingleton<IUpstreamSearchCache>(new FakeUpstreamSearchCache(entries));
-        builder.Services.AddSingleton<IFeedRouter>(
-            new Arbor.DevPackages.Core.Feeds.FeedRouter(
-                [new FeedConfiguration("default", new Uri("https://api.nuget.org/v3/flatcontainer"))]));
-
-        await using var app = builder.Build();
-        Extensions.MapDefaultEndpoints(app);
-        var feedsGroup = app.MapGroup("/feeds/{feedId}");
-        ServiceIndexEndpoints.MapServiceIndex(feedsGroup);
-        SearchEndpoints.MapSearch(feedsGroup);
-
-        await app.StartAsync();
-
+        // ContentRootPath is set to a unique, empty temp directory so no ambient
+        // appsettings.json can override UseUrls or add unexpected Kestrel config.
+        var isolatedContentRoot = Directory.CreateTempSubdirectory("ArborDevPkgTest_").FullName;
         try
         {
-            var indexUrl = app.Urls.FirstOrDefault() is { } url
-                ? $"{url}/feeds/default/v3/index.json"
-                : throw new InvalidOperationException("The test server did not bind to any address.");
+            var builder = WebApplication.CreateBuilder(new WebApplicationOptions { ContentRootPath = isolatedContentRoot });
+            builder.WebHost.UseUrls("http://127.0.0.1:0");
+            Extensions.AddServiceDefaults(builder);
+            builder.Services.AddSingleton<IUpstreamSearchCache>(new FakeUpstreamSearchCache(entries));
+            builder.Services.AddSingleton<IFeedRouter>(
+                new Arbor.DevPackages.Core.Feeds.FeedRouter(
+                    [new FeedConfiguration("default", new Uri("https://api.nuget.org/v3/flatcontainer"))]));
 
-            var source = new PackageSource(indexUrl);
-            var repository = Repository.Factory.GetCoreV3(source);
+            await using var app = builder.Build();
+            Extensions.MapDefaultEndpoints(app);
+            var feedsGroup = app.MapGroup("/feeds/{feedId}");
+            ServiceIndexEndpoints.MapServiceIndex(feedsGroup);
+            SearchEndpoints.MapSearch(feedsGroup);
 
-            var resource = await repository.GetResourceAsync<PackageSearchResource>(CancellationToken.None);
+            await app.StartAsync();
 
-            var results = await resource.SearchAsync(
-                "Serilog",
-                new SearchFilter(includePrerelease: false),
-                skip: 0,
-                take: 10,
-                NullLogger.Instance,
-                CancellationToken.None);
+            try
+            {
+                var indexUrl = app.Urls.FirstOrDefault() is { } url
+                    ? $"{url}/feeds/default/v3/index.json"
+                    : throw new InvalidOperationException("The test server did not bind to any address.");
 
-            var packages = results.ToList();
-            packages.Should().ContainSingle(p =>
-                p.Identity.Id.Equals("Serilog", StringComparison.OrdinalIgnoreCase));
+                var source = new PackageSource(indexUrl);
+                var repository = Repository.Factory.GetCoreV3(source);
+
+                var resource = await repository.GetResourceAsync<PackageSearchResource>(CancellationToken.None);
+
+                var results = await resource.SearchAsync(
+                    "Serilog",
+                    new SearchFilter(includePrerelease: false),
+                    skip: 0,
+                    take: 10,
+                    NullLogger.Instance,
+                    CancellationToken.None);
+
+                var packages = results.ToList();
+                packages.Should().ContainSingle(p =>
+                    p.Identity.Id.Equals("Serilog", StringComparison.OrdinalIgnoreCase));
+            }
+            finally
+            {
+                await app.StopAsync();
+            }
         }
         finally
         {
-            await app.StopAsync();
+            Directory.Delete(isolatedContentRoot, recursive: true);
         }
     }
 }
