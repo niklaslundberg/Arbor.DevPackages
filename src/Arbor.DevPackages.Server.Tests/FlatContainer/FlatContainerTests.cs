@@ -215,56 +215,66 @@ public sealed class FlatContainerTests : IClassFixture<WebApplicationFactory<Pro
         var collector = new RecordingStatisticsCollector();
 
         // Start a real Kestrel server so NuGet.Protocol uses its own HTTP stack.
-        var builder = WebApplication.CreateBuilder();
-        builder.WebHost.UseUrls("http://127.0.0.1:0");
-        Arbor.DevPackages.ServiceDefaults.Extensions.AddServiceDefaults(builder);
-        builder.Services.AddSingleton<IPackageStore>(store);
-        builder.Services.AddSingleton<IStatisticsCollector>(collector);
-        builder.Services.AddSingleton<IFeedRouter>(
-            new Arbor.DevPackages.Core.Feeds.FeedRouter(
-                [new FeedConfiguration("default", new Uri("https://api.nuget.org/v3/flatcontainer"))]));
-
-        await using var app = builder.Build();
-        Arbor.DevPackages.ServiceDefaults.Extensions.MapDefaultEndpoints(app);
-        var feedsGroup = app.MapGroup("/feeds/{feedId}");
-        ServiceIndexEndpoints.MapServiceIndex(feedsGroup);
-        FlatContainerEndpoints.MapFlatContainer(feedsGroup);
-
-        await app.StartAsync();
-
+        // ContentRootPath is set to a unique, empty temp directory so no ambient
+        // appsettings.json can override UseUrls or add unexpected Kestrel config.
+        var isolatedContentRoot = Directory.CreateTempSubdirectory("ArborDevPkgTest_").FullName;
         try
         {
-            var indexUrl = app.Urls.FirstOrDefault() is { } url
-                ? $"{url}/feeds/default/v3/index.json"
-                : throw new InvalidOperationException("The test server did not bind to any address.");
+            var builder = WebApplication.CreateBuilder(new WebApplicationOptions { ContentRootPath = isolatedContentRoot });
+            builder.WebHost.UseUrls("http://127.0.0.1:0");
+            Arbor.DevPackages.ServiceDefaults.Extensions.AddServiceDefaults(builder);
+            builder.Services.AddSingleton<IPackageStore>(store);
+            builder.Services.AddSingleton<IStatisticsCollector>(collector);
+            builder.Services.AddSingleton<IFeedRouter>(
+                new Arbor.DevPackages.Core.Feeds.FeedRouter(
+                    [new FeedConfiguration("default", new Uri("https://api.nuget.org/v3/flatcontainer"))]));
 
-            var source = new PackageSource(indexUrl);
-            var repository = Repository.Factory.GetCoreV3(source);
+            await using var app = builder.Build();
+            Arbor.DevPackages.ServiceDefaults.Extensions.MapDefaultEndpoints(app);
+            var feedsGroup = app.MapGroup("/feeds/{feedId}");
+            ServiceIndexEndpoints.MapServiceIndex(feedsGroup);
+            FlatContainerEndpoints.MapFlatContainer(feedsGroup);
 
-            using var cache = new SourceCacheContext { NoCache = true };
-            var resource = await repository.GetResourceAsync<FindPackageByIdResource>(CancellationToken.None);
+            await app.StartAsync();
 
-            // Verify the version list endpoint.
-            var versions = await resource.GetAllVersionsAsync(
-                "serilog", cache, NullLogger.Instance, CancellationToken.None);
+            try
+            {
+                var indexUrl = app.Urls.FirstOrDefault() is { } url
+                    ? $"{url}/feeds/default/v3/index.json"
+                    : throw new InvalidOperationException("The test server did not bind to any address.");
 
-            versions.Should().ContainSingle(v => v == new NuGetVersion("3.1.1"));
+                var source = new PackageSource(indexUrl);
+                var repository = Repository.Factory.GetCoreV3(source);
 
-            // Verify the nupkg download endpoint.
-            using var ms = new MemoryStream();
-            var downloaded = await resource.CopyNupkgToStreamAsync(
-                "serilog", new NuGetVersion("3.1.1"), ms, cache, NullLogger.Instance, CancellationToken.None);
+                using var cache = new SourceCacheContext { NoCache = true };
+                var resource = await repository.GetResourceAsync<FindPackageByIdResource>(CancellationToken.None);
 
-            downloaded.Should().BeTrue();
-            ms.ToArray().Should().BeEquivalentTo(nupkgBytes);
+                // Verify the version list endpoint.
+                var versions = await resource.GetAllVersionsAsync(
+                    "serilog", cache, NullLogger.Instance, CancellationToken.None);
 
-            // Verify that a download event was recorded.
-            collector.RecordedEvents.Should().ContainSingle(
-                e => e.Identity.Id == "serilog" && e.Identity.Version == "3.1.1");
+                versions.Should().ContainSingle(v => v == new NuGetVersion("3.1.1"));
+
+                // Verify the nupkg download endpoint.
+                using var ms = new MemoryStream();
+                var downloaded = await resource.CopyNupkgToStreamAsync(
+                    "serilog", new NuGetVersion("3.1.1"), ms, cache, NullLogger.Instance, CancellationToken.None);
+
+                downloaded.Should().BeTrue();
+                ms.ToArray().Should().BeEquivalentTo(nupkgBytes);
+
+                // Verify that a download event was recorded.
+                collector.RecordedEvents.Should().ContainSingle(
+                    e => e.Identity.Id == "serilog" && e.Identity.Version == "3.1.1");
+            }
+            finally
+            {
+                await app.StopAsync();
+            }
         }
         finally
         {
-            await app.StopAsync();
+            Directory.Delete(isolatedContentRoot, recursive: true);
         }
     }
 }

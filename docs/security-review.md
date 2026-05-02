@@ -31,11 +31,11 @@ Credentials for private upstream feeds must never be stored in plaintext in conf
 
 ### 3. TLS
 
-- The initial implementation uses HTTP only for local loopback developer use. This is acceptable only when the server is reachable exclusively on the loopback interface of a single developer machine.
+- HTTP on port 5000 is the default for local loopback developer use. This is acceptable only when the server is reachable exclusively on the loopback interface of a single developer machine.
 - HTTP is **not** acceptable if the server is reachable from another machine, container, VM, or any non-loopback interface; those environments must use HTTPS.
-- HTTPS support will be added in Iteration 13 as an opt-in configuration option using ASP.NET Core Kestrel with a developer certificate.
-- Never configure `SslProtocols.None` or `SslProtocols.Ssl3` or `SslProtocols.Tls` (TLS 1.0).
-- Minimum: TLS 1.2. Prefer TLS 1.3 where client supports it.
+- HTTPS is available as an opt-in configuration option using ASP.NET Core Kestrel with a developer certificate (Iteration 13). Enable it by ensuring the `Kestrel.Endpoints.Https` block is present in `appsettings.json` and running `dotnet dev-certs https --trust`.
+- The server enforces a minimum of TLS 1.2 via `ConfigureHttpsDefaults` in `Program.cs`. TLS 1.3 is enabled and preferred where both sides support it.
+- `SslProtocols.None`, `SslProtocols.Ssl3`, `SslProtocols.Tls` (TLS 1.0), and `SslProtocols.Tls11` (TLS 1.1) are never configured.
 
 ### 4. Logging
 

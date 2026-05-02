@@ -1,3 +1,4 @@
+using System.Security.Authentication;
 using Arbor.DevPackages.Core.Feeds;
 using Arbor.DevPackages.Core.Packages;
 using Arbor.DevPackages.Core.Proxy;
@@ -12,6 +13,15 @@ using Arbor.DevPackages.Server.Stats;
 using Arbor.DevPackages.ServiceDefaults;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Enforce minimum TLS 1.2 and prefer TLS 1.3 for all HTTPS endpoints.
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.ConfigureHttpsDefaults(httpsOptions =>
+    {
+        httpsOptions.SslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13;
+    });
+});
 
 builder.AddServiceDefaults();
 

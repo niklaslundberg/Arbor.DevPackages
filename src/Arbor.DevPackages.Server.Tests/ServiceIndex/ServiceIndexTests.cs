@@ -104,35 +104,50 @@ public sealed class ServiceIndexTests : IClassFixture<WebApplicationFactory<Prog
     {
         // Use a real Kestrel listener on a random port so NuGet.Protocol can
         // connect via its own HTTP stack without any handler injection.
-        var builder = WebApplication.CreateBuilder();
-        builder.WebHost.UseUrls("http://127.0.0.1:0");
-        Arbor.DevPackages.ServiceDefaults.Extensions.AddServiceDefaults(builder);
-        builder.Services.AddSingleton<IFeedRouter>(
-            new Arbor.DevPackages.Core.Feeds.FeedRouter(
-                [new FeedConfiguration("default", new Uri("https://api.nuget.org/v3/flatcontainer"), AllowPrerelease: true)]));
+        // ContentRootPath is set to a unique, empty temp directory so no ambient
+        // appsettings.json can override UseUrls or add unexpected Kestrel config.
+        var isolatedContentRoot = Directory.CreateTempSubdirectory("ArborDevPkgTest_").FullName;
+        try
+        {
+            var builder = WebApplication.CreateBuilder(new WebApplicationOptions { ContentRootPath = isolatedContentRoot });
+            builder.WebHost.UseUrls("http://127.0.0.1:0");
+            Arbor.DevPackages.ServiceDefaults.Extensions.AddServiceDefaults(builder);
+            builder.Services.AddSingleton<IFeedRouter>(
+                new Arbor.DevPackages.Core.Feeds.FeedRouter(
+                    [new FeedConfiguration("default", new Uri("https://api.nuget.org/v3/flatcontainer"), AllowPrerelease: true)]));
 
-        await using var app = builder.Build();
-        Arbor.DevPackages.ServiceDefaults.Extensions.MapDefaultEndpoints(app);
-        var feedsGroup = app.MapGroup("/feeds/{feedId}");
-        Arbor.DevPackages.Server.ServiceIndex.ServiceIndexEndpoints.MapServiceIndex(feedsGroup);
+            await using var app = builder.Build();
+            Arbor.DevPackages.ServiceDefaults.Extensions.MapDefaultEndpoints(app);
+            var feedsGroup = app.MapGroup("/feeds/{feedId}");
+            Arbor.DevPackages.Server.ServiceIndex.ServiceIndexEndpoints.MapServiceIndex(feedsGroup);
 
-        await app.StartAsync();
+            await app.StartAsync();
 
-        var indexUrl = app.Urls.FirstOrDefault() is { } url
-            ? $"{url}/feeds/default/v3/index.json"
-            : throw new InvalidOperationException("The test server did not bind to any address.");
+            try
+            {
+                var indexUrl = app.Urls.FirstOrDefault() is { } url
+                    ? $"{url}/feeds/default/v3/index.json"
+                    : throw new InvalidOperationException("The test server did not bind to any address.");
 
-        var source = new PackageSource(indexUrl);
-        var repository = Repository.Factory.GetCoreV3(source);
+                var source = new PackageSource(indexUrl);
+                var repository = Repository.Factory.GetCoreV3(source);
 
-        var serviceIndex = await repository.GetResourceAsync<ServiceIndexResourceV3>(CancellationToken.None);
+                var serviceIndex = await repository.GetResourceAsync<ServiceIndexResourceV3>(CancellationToken.None);
 
-        serviceIndex.Should().NotBeNull();
-        serviceIndex.GetServiceEntryUri("PackageBaseAddress/3.0.0").Should().NotBeNull();
-        serviceIndex.GetServiceEntryUri("RegistrationsBaseUrl/3.6.0").Should().NotBeNull();
-        serviceIndex.GetServiceEntryUri("SearchQueryService/3.5.0").Should().NotBeNull();
-
-        await app.StopAsync();
+                serviceIndex.Should().NotBeNull();
+                serviceIndex.GetServiceEntryUri("PackageBaseAddress/3.0.0").Should().NotBeNull();
+                serviceIndex.GetServiceEntryUri("RegistrationsBaseUrl/3.6.0").Should().NotBeNull();
+                serviceIndex.GetServiceEntryUri("SearchQueryService/3.5.0").Should().NotBeNull();
+            }
+            finally
+            {
+                await app.StopAsync();
+            }
+        }
+        finally
+        {
+            Directory.Delete(isolatedContentRoot, recursive: true);
+        }
     }
 
     [Fact]

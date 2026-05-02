@@ -279,56 +279,66 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
         {
             // Start a real Kestrel server so NuGet.Protocol uses its own HTTP stack.
             // Push must come from loopback, so bind to 127.0.0.1.
-            var builder = WebApplication.CreateBuilder();
-            builder.WebHost.UseUrls("http://127.0.0.1:0");
-            Arbor.DevPackages.ServiceDefaults.Extensions.AddServiceDefaults(builder);
-            builder.Services.AddSingleton<IPackageStore>(store);
-            builder.Services.AddSingleton<IStatisticsCollector>(new RecordingStatisticsCollector());
-            builder.Services.AddSingleton<IFeedRouter>(
-                new FeedRouter(
-                    [new FeedConfiguration("local", AllowPush: true)]));
-
-            await using var app = builder.Build();
-            Arbor.DevPackages.ServiceDefaults.Extensions.MapDefaultEndpoints(app);
-            var feedsGroup = app.MapGroup("/feeds/{feedId}");
-            ServiceIndexEndpoints.MapServiceIndex(feedsGroup);
-            PushEndpoints.MapPush(feedsGroup);
-
-            await app.StartAsync();
-
-            var boundUrl = app.Urls.FirstOrDefault()
-                ?? throw new InvalidOperationException("The test server did not bind to any address.");
-
+            // ContentRootPath is set to a unique, empty temp directory so no ambient
+            // appsettings.json can override UseUrls or add unexpected Kestrel config.
+            var isolatedContentRoot = Directory.CreateTempSubdirectory("ArborDevPkgTest_").FullName;
             try
             {
-                var indexUrl = $"{boundUrl}/feeds/local/v3/index.json";
+                var builder = WebApplication.CreateBuilder(new WebApplicationOptions { ContentRootPath = isolatedContentRoot });
+                builder.WebHost.UseUrls("http://127.0.0.1:0");
+                Arbor.DevPackages.ServiceDefaults.Extensions.AddServiceDefaults(builder);
+                builder.Services.AddSingleton<IPackageStore>(store);
+                builder.Services.AddSingleton<IStatisticsCollector>(new RecordingStatisticsCollector());
+                builder.Services.AddSingleton<IFeedRouter>(
+                    new FeedRouter(
+                        [new FeedConfiguration("local", AllowPush: true)]));
 
-                var source = new PackageSource(indexUrl);
-                var repository = Repository.Factory.GetCoreV3(source);
+                await using var app = builder.Build();
+                Arbor.DevPackages.ServiceDefaults.Extensions.MapDefaultEndpoints(app);
+                var feedsGroup = app.MapGroup("/feeds/{feedId}");
+                ServiceIndexEndpoints.MapServiceIndex(feedsGroup);
+                PushEndpoints.MapPush(feedsGroup);
 
-                var pushResource = await repository.GetResourceAsync<PackageUpdateResource>(CancellationToken.None);
+                await app.StartAsync();
 
-                await pushResource.Push(
-                    packagePaths: [tmpNupkg],
-                    symbolSource: null,
-                    timeoutInSecond: 30,
-                    disableBuffering: false,
-                    getApiKey: _ => null,
-                    getSymbolApiKey: _ => null,
-                    noServiceEndpoint: false,
-                    skipDuplicate: false,
-                    symbolPackageUpdateResource: null,
-                    allowInsecureConnections: true,
-                    log: NullLogger.Instance);
+                var boundUrl = app.Urls.FirstOrDefault()
+                    ?? throw new InvalidOperationException("The test server did not bind to any address.");
 
-                // Verify the package was stored.
-                var identity = new PackageIdentity("pushprotocoltest", "2.0.0");
-                var stored = await store.ExistsAsync(identity, CancellationToken.None);
-                stored.Should().BeTrue(because: "PackageUpdateResource.Push should have stored the package");
+                try
+                {
+                    var indexUrl = $"{boundUrl}/feeds/local/v3/index.json";
+
+                    var source = new PackageSource(indexUrl);
+                    var repository = Repository.Factory.GetCoreV3(source);
+
+                    var pushResource = await repository.GetResourceAsync<PackageUpdateResource>(CancellationToken.None);
+
+                    await pushResource.Push(
+                        packagePaths: [tmpNupkg],
+                        symbolSource: null,
+                        timeoutInSecond: 30,
+                        disableBuffering: false,
+                        getApiKey: _ => null,
+                        getSymbolApiKey: _ => null,
+                        noServiceEndpoint: false,
+                        skipDuplicate: false,
+                        symbolPackageUpdateResource: null,
+                        allowInsecureConnections: true,
+                        log: NullLogger.Instance);
+
+                    // Verify the package was stored.
+                    var identity = new PackageIdentity("pushprotocoltest", "2.0.0");
+                    var stored = await store.ExistsAsync(identity, CancellationToken.None);
+                    stored.Should().BeTrue(because: "PackageUpdateResource.Push should have stored the package");
+                }
+                finally
+                {
+                    await app.StopAsync();
+                }
             }
             finally
             {
-                await app.StopAsync();
+                Directory.Delete(isolatedContentRoot, recursive: true);
             }
         }
         finally
