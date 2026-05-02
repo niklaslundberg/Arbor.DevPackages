@@ -3,6 +3,7 @@ using System.Text;
 using System.IO.Compression;
 using System.Text.Json;
 using Arbor.DevPackages.Core.Packages;
+using Arbor.DevPackages.Core.Proxy;
 using Arbor.DevPackages.Core.Statistics;
 using Arbor.DevPackages.Server.FlatContainer;
 using Arbor.DevPackages.Server.ServiceIndex;
@@ -51,6 +52,9 @@ public sealed class FlatContainerTests : IClassFixture<WebApplicationFactory<Pro
             {
                 services.AddSingleton<IPackageStore>(packageStore);
                 services.AddSingleton<IStatisticsCollector>(statsCollector);
+                // Override the real probe and proxy with offline/no-op fakes so tests
+                // never attempt real network calls to nuget.org on cache misses.
+                services.AddSingleton<IConnectivityProbe>(new FakeConnectivityProbe(isReachable: false));
             }));
     }
 
