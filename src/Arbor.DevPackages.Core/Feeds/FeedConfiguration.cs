@@ -1,3 +1,7 @@
 namespace Arbor.DevPackages.Core.Feeds;
 
-public sealed record FeedConfiguration(string FeedId, Uri UpstreamUrl, bool AllowPrerelease = false);
+public sealed record FeedConfiguration(
+    string FeedId,
+    Uri UpstreamUrl,
+    bool AllowPrerelease = false,
+    Uri? SearchUrl = null);
