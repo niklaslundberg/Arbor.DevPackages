@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using Arbor.DevPackages.Core.Feeds;
 using Arbor.DevPackages.Server.Search;
 using Arbor.DevPackages.Server.ServiceIndex;
 using Arbor.DevPackages.ServiceDefaults;
@@ -33,6 +34,18 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
             b.ConfigureServices(services =>
             {
                 services.AddSingleton(cache);
+            }));
+    }
+
+    private WebApplicationFactory<Program> BuildFactory(
+        IUpstreamSearchCache cache,
+        IFeedRouter feedRouter)
+    {
+        return _factory.WithWebHostBuilder(b =>
+            b.ConfigureServices(services =>
+            {
+                services.AddSingleton(cache);
+                services.AddSingleton(feedRouter);
             }));
     }
 
@@ -88,7 +101,7 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
         using var factory = BuildFactory(new FakeUpstreamSearchCache(entries));
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/v3/search?q=serilog");
+        var response = await client.GetAsync("/feeds/default/v3/search?q=serilog");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -120,7 +133,7 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
         using var factory = BuildFactory(new FakeUpstreamSearchCache(entries));
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/v3/search?prerelease=true");
+        var response = await client.GetAsync("/feeds/default/v3/search?prerelease=true");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -155,7 +168,7 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
         var client = factory.CreateClient();
 
         // prerelease=false is the default; include it explicitly for clarity.
-        var response = await client.GetAsync("/v3/search?prerelease=false");
+        var response = await client.GetAsync("/feeds/default/v3/search?prerelease=false");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -184,7 +197,7 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
         using var factory = BuildFactory(new FakeUpstreamSearchCache(cachedEntries));
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/v3/search?prerelease=true");
+        var response = await client.GetAsync("/feeds/default/v3/search?prerelease=true");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -215,6 +228,83 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
+    // ─── Feed-aware AllowPrerelease filtering ─────────────────────────────────
+
+    [Fact]
+    public async Task Search_FeedWithAllowPrereleaseTrue_IncludesPrerelease()
+    {
+        var entries = new[]
+        {
+            BuildPackage("Serilog", "3.1.1"),
+            BuildPackage(
+                "Serilog.Sinks.File",
+                "6.0.0-beta.1",
+                versions: [new SearchVersionEntry(null, "6.0.0-beta.1", 0)])
+        };
+
+        // Override feed router with a feed that explicitly allows prerelease.
+        var feedRouter = new Arbor.DevPackages.Core.Feeds.FeedRouter(
+            [new FeedConfiguration("default", new Uri("https://api.nuget.org/v3/flatcontainer"), AllowPrerelease: true)]);
+
+        using var factory = BuildFactory(new FakeUpstreamSearchCache(entries), feedRouter);
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/feeds/default/v3/search?prerelease=true");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+
+        doc.RootElement.GetProperty("totalHits").GetInt32().Should().Be(2);
+
+        var ids = doc.RootElement.GetProperty("data")
+            .EnumerateArray()
+            .Select(e => e.GetProperty("id").GetString())
+            .ToList();
+
+        ids.Should().Contain("Serilog.Sinks.File");
+        ids.Should().Contain("Serilog");
+    }
+
+    [Fact]
+    public async Task Search_FeedWithAllowPrereleaseFalse_ExcludesPrerelease()
+    {
+        var entries = new[]
+        {
+            BuildPackage("Serilog", "3.1.1"),
+            BuildPackage(
+                "Serilog.Sinks.File",
+                "6.0.0-beta.1",
+                versions: [new SearchVersionEntry(null, "6.0.0-beta.1", 0)])
+        };
+
+        // Override feed router with a feed that disallows prerelease.
+        var feedRouter = new Arbor.DevPackages.Core.Feeds.FeedRouter(
+            [new FeedConfiguration("default", new Uri("https://api.nuget.org/v3/flatcontainer"), AllowPrerelease: false)]);
+
+        using var factory = BuildFactory(new FakeUpstreamSearchCache(entries), feedRouter);
+        var client = factory.CreateClient();
+
+        // Even though the client requests prerelease=true, the feed disallows it.
+        var response = await client.GetAsync("/feeds/default/v3/search?prerelease=true");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+
+        doc.RootElement.GetProperty("totalHits").GetInt32().Should().Be(1);
+
+        var ids = doc.RootElement.GetProperty("data")
+            .EnumerateArray()
+            .Select(e => e.GetProperty("id").GetString())
+            .ToList();
+
+        ids.Should().NotContain("Serilog.Sinks.File");
+        ids.Should().Contain("Serilog");
+    }
+
     // ─── NuGet.Protocol end-to-end ───────────────────────────────────────────
 
     [Fact]
@@ -231,18 +321,22 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         Extensions.AddServiceDefaults(builder);
         builder.Services.AddSingleton<IUpstreamSearchCache>(new FakeUpstreamSearchCache(entries));
+        builder.Services.AddSingleton<IFeedRouter>(
+            new Arbor.DevPackages.Core.Feeds.FeedRouter(
+                [new FeedConfiguration("default", new Uri("https://api.nuget.org/v3/flatcontainer"))]));
 
         await using var app = builder.Build();
         Extensions.MapDefaultEndpoints(app);
-        ServiceIndexEndpoints.MapServiceIndex(app);
-        SearchEndpoints.MapSearch(app);
+        var feedsGroup = app.MapGroup("/feeds/{feedId}");
+        ServiceIndexEndpoints.MapServiceIndex(feedsGroup);
+        SearchEndpoints.MapSearch(feedsGroup);
 
         await app.StartAsync();
 
         try
         {
             var indexUrl = app.Urls.FirstOrDefault() is { } url
-                ? $"{url}/v3/index.json"
+                ? $"{url}/feeds/default/v3/index.json"
                 : throw new InvalidOperationException("The test server did not bind to any address.");
 
             var source = new PackageSource(indexUrl);

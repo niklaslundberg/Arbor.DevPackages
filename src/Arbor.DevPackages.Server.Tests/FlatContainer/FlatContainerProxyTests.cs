@@ -79,7 +79,7 @@ public sealed class FlatContainerProxyTests : IClassFixture<WebApplicationFactor
 
         // Act
         var response = await client.GetAsync(
-            "/v3/flatcontainer/testpkg/1.0.0/testpkg.1.0.0.nupkg");
+            "/feeds/default/v3/flatcontainer/testpkg/1.0.0/testpkg.1.0.0.nupkg");
 
         // Assert: package should be fetched from upstream and served.
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -102,7 +102,7 @@ public sealed class FlatContainerProxyTests : IClassFixture<WebApplicationFactor
 
         // Act
         var response = await client.GetAsync(
-            "/v3/flatcontainer/testpkg/1.0.0/testpkg.1.0.0.nupkg");
+            "/feeds/default/v3/flatcontainer/testpkg/1.0.0/testpkg.1.0.0.nupkg");
 
         // Assert: 404 while the upstream is within its back-off window.
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -126,7 +126,7 @@ public sealed class FlatContainerProxyTests : IClassFixture<WebApplicationFactor
 
         // Act
         var response = await client.GetAsync(
-            "/v3/flatcontainer/testpkg/1.0.0/testpkg.1.0.0.nupkg");
+            "/feeds/default/v3/flatcontainer/testpkg/1.0.0/testpkg.1.0.0.nupkg");
 
         // Assert: 502 is returned and the upstream is marked offline.
         response.StatusCode.Should().Be(HttpStatusCode.BadGateway);

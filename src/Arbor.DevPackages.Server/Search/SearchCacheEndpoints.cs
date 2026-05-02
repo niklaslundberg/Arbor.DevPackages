@@ -16,11 +16,12 @@ public static class SearchCacheEndpoints
 
     private static async Task<IResult> RefreshCacheAsync(
         string feedId,
-        FeedConfiguration feed,
+        IFeedRouter feedRouter,
         IUpstreamSearchCache cache,
         CancellationToken cancellationToken)
     {
-        if (!string.Equals(feedId, feed.FeedId, StringComparison.Ordinal))
+        var feed = await feedRouter.RouteAsync(feedId, cancellationToken);
+        if (feed is null)
         {
             return Results.NotFound();
         }

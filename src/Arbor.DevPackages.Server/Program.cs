@@ -22,12 +22,42 @@ builder.Services.AddSingleton<IStatisticsCollector, NoOpProductionStatisticsColl
 // HTTP client factory for upstream proxy.
 builder.Services.AddHttpClient();
 
-// Feed configuration (flat-container base URL for the upstream feed).
-var upstreamFeedUrl = builder.Configuration["UpstreamFeedUrl"]
-    ?? "https://api.nuget.org/v3/flatcontainer";
-var upstreamSearchUrlString = builder.Configuration["UpstreamSearchUrl"];
-var upstreamSearchUrl = upstreamSearchUrlString is not null ? new Uri(upstreamSearchUrlString) : null;
-builder.Services.AddSingleton(new FeedConfiguration("default", new Uri(upstreamFeedUrl), SearchUrl: upstreamSearchUrl));
+// Build the list of feed configurations.
+// Prefer the structured "Feeds" array; fall back to the legacy flat config keys.
+var feedsSection = builder.Configuration.GetSection("Feeds");
+List<FeedConfiguration> feeds = [];
+
+if (feedsSection.Exists())
+{
+    foreach (var section in feedsSection.GetChildren())
+    {
+        var id = section["Id"] ?? throw new InvalidOperationException("Each feed entry requires an 'Id'.");
+        var url = section["UpstreamUrl"] ?? throw new InvalidOperationException($"Feed '{id}' requires an 'UpstreamUrl'.");
+        var allowPrerelease = section.GetValue<bool>("AllowPrerelease");
+        var searchUrlString = section["SearchUrl"];
+        var searchUrl = searchUrlString is not null ? new Uri(searchUrlString) : null;
+        feeds.Add(new FeedConfiguration(id, new Uri(url), AllowPrerelease: allowPrerelease, SearchUrl: searchUrl));
+    }
+}
+
+if (feeds.Count == 0)
+{
+    // Legacy single-feed configuration fallback.
+    // AllowPrerelease defaults to true to preserve the previous behaviour where the
+    // client's ?prerelease= query parameter was the sole control.
+    var upstreamFeedUrl = builder.Configuration["UpstreamFeedUrl"]
+        ?? "https://api.nuget.org/v3/flatcontainer";
+    var upstreamSearchUrlString = builder.Configuration["UpstreamSearchUrl"];
+    var upstreamSearchUrl = upstreamSearchUrlString is not null ? new Uri(upstreamSearchUrlString) : null;
+    feeds.Add(new FeedConfiguration("default", new Uri(upstreamFeedUrl), AllowPrerelease: true, SearchUrl: upstreamSearchUrl));
+}
+
+// Register the first feed as a singleton FeedConfiguration so that UpstreamSearchCache
+// (which depends on it for its search URL) continues to work without changes.
+// TODO: Refactor UpstreamSearchCache to be feed-aware (one cache per feed) and
+//       remove this singleton registration (Iteration 11 candidate).
+builder.Services.AddSingleton(feeds[0]);
+builder.Services.AddSingleton<IFeedRouter>(new FeedRouter(feeds));
 
 // Connectivity probe and upstream proxy.
 var backoffSeconds = builder.Configuration.GetValue<double>("ConnectivityProbe:BackoffSeconds");
@@ -50,10 +80,15 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<UpstreamSearchCach
 var app = builder.Build();
 
 app.MapDefaultEndpoints();
-app.MapServiceIndex();
-app.MapFlatContainer();
-app.MapRegistration();
-app.MapSearch();
+
+// All NuGet v3 endpoints are scoped under /feeds/{feedId}.
+var feedsGroup = app.MapGroup("/feeds/{feedId}");
+feedsGroup.MapServiceIndex();
+feedsGroup.MapFlatContainer();
+feedsGroup.MapRegistration();
+feedsGroup.MapSearch();
+
+// Admin endpoints (not under /feeds/{feedId}).
 app.MapSearchCache();
 
 app.Run();

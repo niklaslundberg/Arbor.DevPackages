@@ -1,7 +1,9 @@
+using Arbor.DevPackages.Core.Feeds;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using NuGet.Configuration;
 using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
@@ -25,7 +27,7 @@ public sealed class ServiceIndexTests : IClassFixture<WebApplicationFactory<Prog
     {
         var client = _factory.CreateClient();
 
-        var response = await client.GetAsync("/v3/index.json");
+        var response = await client.GetAsync("/feeds/default/v3/index.json");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -43,7 +45,7 @@ public sealed class ServiceIndexTests : IClassFixture<WebApplicationFactory<Prog
         var client = _factory.CreateClient();
         var expectedHost = client.BaseAddress!.Host;
 
-        var response = await client.GetAsync("/v3/index.json");
+        var response = await client.GetAsync("/feeds/default/v3/index.json");
 
         var json = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(json);
@@ -61,9 +63,40 @@ public sealed class ServiceIndexTests : IClassFixture<WebApplicationFactory<Prog
     {
         var client = _factory.CreateClient();
 
-        var response = await client.GetAsync("/v3/index.json");
+        var response = await client.GetAsync("/feeds/default/v3/index.json");
 
         response.Content.Headers.ContentType?.MediaType.Should().Be("application/json");
+    }
+
+    [Fact]
+    public async Task GetServiceIndex_UnknownFeed_Returns404()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/feeds/nonexistent-feed/v3/index.json");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task ServiceIndex_PerFeed_ResourcesPointToCorrectFeedPath()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/feeds/default/v3/index.json");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+        var resources = doc.RootElement.GetProperty("resources");
+
+        foreach (var resource in resources.EnumerateArray())
+        {
+            var id = resource.GetProperty("@id").GetString();
+            id.Should().Contain("/feeds/default/v3/",
+                because: "all resource URLs must be scoped under the feed's path segment");
+        }
     }
 
     [Fact]
@@ -74,15 +107,19 @@ public sealed class ServiceIndexTests : IClassFixture<WebApplicationFactory<Prog
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         Arbor.DevPackages.ServiceDefaults.Extensions.AddServiceDefaults(builder);
+        builder.Services.AddSingleton<IFeedRouter>(
+            new Arbor.DevPackages.Core.Feeds.FeedRouter(
+                [new FeedConfiguration("default", new Uri("https://api.nuget.org/v3/flatcontainer"), AllowPrerelease: true)]));
 
         await using var app = builder.Build();
         Arbor.DevPackages.ServiceDefaults.Extensions.MapDefaultEndpoints(app);
-        Arbor.DevPackages.Server.ServiceIndex.ServiceIndexEndpoints.MapServiceIndex(app);
+        var feedsGroup = app.MapGroup("/feeds/{feedId}");
+        Arbor.DevPackages.Server.ServiceIndex.ServiceIndexEndpoints.MapServiceIndex(feedsGroup);
 
         await app.StartAsync();
 
         var indexUrl = app.Urls.FirstOrDefault() is { } url
-            ? $"{url}/v3/index.json"
+            ? $"{url}/feeds/default/v3/index.json"
             : throw new InvalidOperationException("The test server did not bind to any address.");
 
         var source = new PackageSource(indexUrl);

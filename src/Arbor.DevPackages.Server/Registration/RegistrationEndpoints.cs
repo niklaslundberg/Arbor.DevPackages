@@ -1,3 +1,4 @@
+using Arbor.DevPackages.Core.Feeds;
 using Arbor.DevPackages.Core.Packages;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -17,11 +18,19 @@ public static class RegistrationEndpoints
     }
 
     private static async Task<IResult> GetRegistrationIndexAsync(
+        string feedId,
         string id,
+        IFeedRouter feedRouter,
         IPackageStore store,
         HttpContext context,
         CancellationToken cancellationToken)
     {
+        var feed = await feedRouter.RouteAsync(feedId, cancellationToken);
+        if (feed is null)
+        {
+            return Results.NotFound();
+        }
+
         id = id.ToLowerInvariant();
 
         var all = await store.ListAllAsync(cancellationToken);
@@ -45,19 +54,27 @@ public static class RegistrationEndpoints
             }
         }
 
-        var baseUrl = $"{context.Request.Scheme}://{context.Request.Host}{context.Request.PathBase}";
+        var baseUrl = $"{context.Request.Scheme}://{context.Request.Host}{context.Request.PathBase}/feeds/{Uri.EscapeDataString(feed.FeedId)}";
         var response = RegistrationIndexBuilder.BuildIndex(baseUrl, id, metadataItems);
 
         return Results.Json(response, contentType: "application/json");
     }
 
     private static async Task<IResult> GetRegistrationLeafAsync(
+        string feedId,
         string id,
         string version,
+        IFeedRouter feedRouter,
         IPackageStore store,
         HttpContext context,
         CancellationToken cancellationToken)
     {
+        var feed = await feedRouter.RouteAsync(feedId, cancellationToken);
+        if (feed is null)
+        {
+            return Results.NotFound();
+        }
+
         id = id.ToLowerInvariant();
         version = version.ToLowerInvariant();
 
@@ -69,7 +86,7 @@ public static class RegistrationEndpoints
             return Results.NotFound();
         }
 
-        var baseUrl = $"{context.Request.Scheme}://{context.Request.Host}{context.Request.PathBase}";
+        var baseUrl = $"{context.Request.Scheme}://{context.Request.Host}{context.Request.PathBase}/feeds/{Uri.EscapeDataString(feed.FeedId)}";
         var response = RegistrationIndexBuilder.BuildLeaf(baseUrl, metadata);
 
         return Results.Json(response, contentType: "application/json");

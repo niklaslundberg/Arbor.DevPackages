@@ -1,3 +1,4 @@
+using Arbor.DevPackages.Core.Feeds;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using NuGet.Versioning;
@@ -8,17 +9,30 @@ public static class SearchEndpoints
 {
     public static IEndpointRouteBuilder MapSearch(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/v3/search", HandleSearch);
+        app.MapGet("/v3/search", HandleSearchAsync);
         return app;
     }
 
-    private static IResult HandleSearch(
+    private static async Task<IResult> HandleSearchAsync(
+        string feedId,
+        IFeedRouter feedRouter,
         IUpstreamSearchCache cache,
         string? q = null,
         int skip = 0,
         int take = 20,
-        bool prerelease = false)
+        bool prerelease = false,
+        CancellationToken cancellationToken = default)
     {
+        var feed = await feedRouter.RouteAsync(feedId, cancellationToken);
+        if (feed is null)
+        {
+            return Results.NotFound();
+        }
+
+        // Feed-level AllowPrerelease acts as a cap: if the feed disallows prerelease,
+        // prerelease packages are never returned regardless of the client's request.
+        bool effectivePrerelease = prerelease && feed.AllowPrerelease;
+
         var allEntries = cache.GetAllEntries() ?? [];
 
         IEnumerable<SearchResultPackage> filtered = allEntries;
@@ -28,7 +42,7 @@ public static class SearchEndpoints
             filtered = filtered.Where(e => MatchesQuery(e, q));
         }
 
-        if (!prerelease)
+        if (!effectivePrerelease)
         {
             filtered = filtered
                 .Where(HasStableVersion)
