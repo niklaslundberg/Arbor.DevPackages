@@ -63,6 +63,29 @@ public sealed class SqliteStatisticsReader : IStatisticsReader
         return ParseTimestamp((string)result);
     }
 
+    public async Task<IReadOnlyList<PackageStatsSummary>> GetAllPackageStatsAsync(CancellationToken cancellationToken)
+    {
+        using SqliteCommand cmd = _connection.CreateCommand();
+        cmd.CommandText = """
+            SELECT package_id, version, COUNT(*) AS download_count, MAX(downloaded_at) AS last_downloaded_at
+            FROM download_events
+            GROUP BY package_id, version;
+            """;
+
+        using SqliteDataReader reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        var results = new List<PackageStatsSummary>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var id = reader.GetString(0);
+            var version = reader.GetString(1);
+            var count = reader.GetInt64(2);
+            DateTimeOffset lastDownloadedAt = ParseTimestamp(reader.GetString(3));
+            results.Add(new PackageStatsSummary(new PackageIdentity(id, version), count, lastDownloadedAt));
+        }
+
+        return results;
+    }
+
     private static DateTimeOffset ParseTimestamp(string value)
     {
         if (!DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTimeOffset parsed))

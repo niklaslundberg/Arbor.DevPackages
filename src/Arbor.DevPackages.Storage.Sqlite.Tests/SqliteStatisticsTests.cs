@@ -121,4 +121,38 @@ public sealed class SqliteStatisticsTests : IAsyncLifetime
         DateTimeOffset? result = await _reader.GetLastDownloadedAtAsync(identity, CancellationToken.None);
         result.Should().Be(laterUtc);
     }
+
+    [Fact]
+    public async Task GetAllPackageStats_AfterDownloads_ReturnsCountsAndLastTimestamp()
+    {
+        var identity1 = new PackageIdentity("PackageA", "1.0.0");
+        var identity2 = new PackageIdentity("PackageB", "2.0.0");
+        var time1 = new DateTimeOffset(2026, 4, 29, 9, 0, 0, TimeSpan.Zero);
+        var time2 = new DateTimeOffset(2026, 4, 29, 10, 0, 0, TimeSpan.Zero);
+        var time3 = new DateTimeOffset(2026, 4, 29, 11, 0, 0, TimeSpan.Zero);
+
+        await _collector.RecordDownloadAsync(new DownloadEvent(identity1, time1), CancellationToken.None);
+        await _collector.RecordDownloadAsync(new DownloadEvent(identity1, time2), CancellationToken.None);
+        await _collector.RecordDownloadAsync(new DownloadEvent(identity2, time3), CancellationToken.None);
+
+        IReadOnlyList<PackageStatsSummary> stats = await _reader.GetAllPackageStatsAsync(CancellationToken.None);
+
+        stats.Should().HaveCount(2);
+
+        var a = stats.Single(s => s.Identity.Id == "PackageA");
+        a.DownloadCount.Should().Be(2);
+        a.LastDownloadedAt.Should().Be(time2);
+
+        var b = stats.Single(s => s.Identity.Id == "PackageB");
+        b.DownloadCount.Should().Be(1);
+        b.LastDownloadedAt.Should().Be(time3);
+    }
+
+    [Fact]
+    public async Task GetAllPackageStats_WithNoDownloads_ReturnsEmpty()
+    {
+        IReadOnlyList<PackageStatsSummary> stats = await _reader.GetAllPackageStatsAsync(CancellationToken.None);
+
+        stats.Should().BeEmpty();
+    }
 }

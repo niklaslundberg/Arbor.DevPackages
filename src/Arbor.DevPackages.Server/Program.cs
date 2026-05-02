@@ -7,6 +7,7 @@ using Arbor.DevPackages.Server.Proxy;
 using Arbor.DevPackages.Server.Registration;
 using Arbor.DevPackages.Server.Search;
 using Arbor.DevPackages.Server.ServiceIndex;
+using Arbor.DevPackages.Server.Stats;
 using Arbor.DevPackages.ServiceDefaults;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -18,6 +19,7 @@ var storePath = builder.Configuration["PackageStorePath"]
 
 builder.Services.AddSingleton<IPackageStore>(_ => new FileSystemPackageStore(storePath));
 builder.Services.AddSingleton<IStatisticsCollector, NoOpProductionStatisticsCollector>();
+builder.Services.AddSingleton<IStatisticsReader, NoOpProductionStatisticsReader>();
 
 // HTTP client factory for upstream proxy.
 builder.Services.AddHttpClient();
@@ -90,6 +92,7 @@ feedsGroup.MapSearch();
 
 // Admin endpoints (not under /feeds/{feedId}).
 app.MapSearchCache();
+app.MapStats();
 
 app.Run();
 
@@ -102,5 +105,23 @@ internal sealed class NoOpProductionStatisticsCollector : IStatisticsCollector
 {
     public Task RecordDownloadAsync(DownloadEvent downloadEvent, CancellationToken cancellationToken) =>
         Task.CompletedTask;
+}
+
+/// <summary>
+/// A no-op statistics reader used in production until a persistent implementation is wired up.
+/// </summary>
+internal sealed class NoOpProductionStatisticsReader : IStatisticsReader
+{
+    public Task<long> GetDownloadCountAsync(PackageIdentity identity, CancellationToken cancellationToken) =>
+        Task.FromResult(0L);
+
+    public Task<DateTimeOffset?> GetLastDownloadedAtAsync(PackageIdentity identity, CancellationToken cancellationToken) =>
+        Task.FromResult<DateTimeOffset?>(null);
+
+    public Task<DateTimeOffset?> GetLastDownloadedAtAcrossAllPackagesAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<DateTimeOffset?>(null);
+
+    public Task<IReadOnlyList<PackageStatsSummary>> GetAllPackageStatsAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<PackageStatsSummary>>([]);
 }
 
