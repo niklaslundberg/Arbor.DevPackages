@@ -27,6 +27,9 @@ At the beginning of every session, read these files before making any decision o
 ## Key conventions
 
 - Async methods that perform I/O must accept `CancellationToken cancellationToken` and pass it downstream.
+- Use `is null` / `is { }` rather than `== null` / `!= null`. Prefer `is { }` over `is not null` for non-null checks.
+- Prefer descriptive lambda parameter names — avoid single-character names (e.g. `entry =>` not `e =>`, `package =>` not `p =>`).
+- Use `xunit.v3` + `AwesomeAssertions`. Pass `TestContext.Current.CancellationToken` to all async calls within test methods.
 - Don't add unnecessary `async`/`await` when you can return the `Task`/`ValueTask` directly (expression-body delegation avoids allocating a state machine).
 - Use `throw;` (not `throw ex;`) when rethrowing to preserve the stack trace.
 - Custom public exception types must provide the three standard constructors: parameterless, `(string message)`, and `(string message, Exception innerException)`.
