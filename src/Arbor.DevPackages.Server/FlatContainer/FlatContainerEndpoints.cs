@@ -24,10 +24,18 @@ public static class FlatContainerEndpoints
     }
 
     private static async Task<IResult> GetVersionListAsync(
+        string feedId,
         string id,
+        IFeedRouter feedRouter,
         IPackageStore store,
         CancellationToken cancellationToken)
     {
+        var feed = await feedRouter.RouteAsync(feedId, cancellationToken);
+        if (feed is null)
+        {
+            return Results.NotFound();
+        }
+
         id = id.ToLowerInvariant();
 
         var all = await store.ListAllAsync(cancellationToken);
@@ -46,14 +54,22 @@ public static class FlatContainerEndpoints
     }
 
     private static async Task<IResult> DownloadNupkgAsync(
+        string feedId,
         string id,
         string version,
         string fileName,
+        IFeedRouter feedRouter,
         IPackageStore store,
         IStatisticsCollector statistics,
         HttpContext context,
         CancellationToken cancellationToken)
     {
+        var feed = await feedRouter.RouteAsync(feedId, cancellationToken);
+        if (feed is null)
+        {
+            return Results.NotFound();
+        }
+
         id = id.ToLowerInvariant();
         version = version.ToLowerInvariant();
 
@@ -67,10 +83,9 @@ public static class FlatContainerEndpoints
             // Resolve optional proxy services from DI (null if not configured).
             var probe = context.RequestServices.GetService<IConnectivityProbe>();
             var upstreamProxy = context.RequestServices.GetService<IUpstreamProxy>();
-            var feed = context.RequestServices.GetService<FeedConfiguration>();
 
             // Step 2: If proxy services are not configured, fall back to 404.
-            if (probe is null || upstreamProxy is null || feed is null)
+            if (probe is null || upstreamProxy is null)
             {
                 return Results.NotFound();
             }
@@ -145,12 +160,20 @@ public static class FlatContainerEndpoints
     }
 
     private static async Task<IResult> DownloadNuspecAsync(
+        string feedId,
         string id,
         string version,
         string fileName,
+        IFeedRouter feedRouter,
         IPackageStore store,
         CancellationToken cancellationToken)
     {
+        var feed = await feedRouter.RouteAsync(feedId, cancellationToken);
+        if (feed is null)
+        {
+            return Results.NotFound();
+        }
+
         id = id.ToLowerInvariant();
         version = version.ToLowerInvariant();
 

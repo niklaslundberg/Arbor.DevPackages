@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.IO.Compression;
 using System.Text.Json;
+using Arbor.DevPackages.Core.Feeds;
 using Arbor.DevPackages.Core.Packages;
 using Arbor.DevPackages.Core.Statistics;
 using Arbor.DevPackages.Server.FlatContainer;
@@ -69,7 +70,7 @@ public sealed class RegistrationTests : IClassFixture<WebApplicationFactory<Prog
         using var factory = BuildFactory(StoreWithTestPackage());
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/v3/registration/serilog/index.json");
+        var response = await client.GetAsync("/feeds/default/v3/registration/serilog/index.json");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -103,7 +104,7 @@ public sealed class RegistrationTests : IClassFixture<WebApplicationFactory<Prog
         using var factory = BuildFactory();
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/v3/registration/unknown-package/index.json");
+        var response = await client.GetAsync("/feeds/default/v3/registration/unknown-package/index.json");
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -120,7 +121,7 @@ public sealed class RegistrationTests : IClassFixture<WebApplicationFactory<Prog
         using var factory = BuildFactory(store);
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/v3/registration/serilog/index.json");
+        var response = await client.GetAsync("/feeds/default/v3/registration/serilog/index.json");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -147,7 +148,7 @@ public sealed class RegistrationTests : IClassFixture<WebApplicationFactory<Prog
         using var factory = BuildFactory(StoreWithTestPackage());
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/v3/registration/serilog/3.1.1.json");
+        var response = await client.GetAsync("/feeds/default/v3/registration/serilog/3.1.1.json");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -171,7 +172,7 @@ public sealed class RegistrationTests : IClassFixture<WebApplicationFactory<Prog
         using var factory = BuildFactory();
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/v3/registration/unknown-package/1.0.0.json");
+        var response = await client.GetAsync("/feeds/default/v3/registration/unknown-package/1.0.0.json");
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -204,19 +205,23 @@ public sealed class RegistrationTests : IClassFixture<WebApplicationFactory<Prog
         Arbor.DevPackages.ServiceDefaults.Extensions.AddServiceDefaults(builder);
         builder.Services.AddSingleton<IPackageStore>(store);
         builder.Services.AddSingleton<IStatisticsCollector, NoOpTestStatisticsCollector>();
+        builder.Services.AddSingleton<IFeedRouter>(
+            new Arbor.DevPackages.Core.Feeds.FeedRouter(
+                [new FeedConfiguration("default", new Uri("https://api.nuget.org/v3/flatcontainer"))]));
 
         await using var app = builder.Build();
         Arbor.DevPackages.ServiceDefaults.Extensions.MapDefaultEndpoints(app);
-        ServiceIndexEndpoints.MapServiceIndex(app);
-        FlatContainerEndpoints.MapFlatContainer(app);
-        RegistrationEndpoints.MapRegistration(app);
+        var feedsGroup = app.MapGroup("/feeds/{feedId}");
+        ServiceIndexEndpoints.MapServiceIndex(feedsGroup);
+        FlatContainerEndpoints.MapFlatContainer(feedsGroup);
+        RegistrationEndpoints.MapRegistration(feedsGroup);
 
         await app.StartAsync();
 
         try
         {
             var indexUrl = app.Urls.FirstOrDefault() is { } url
-                ? $"{url}/v3/index.json"
+                ? $"{url}/feeds/default/v3/index.json"
                 : throw new InvalidOperationException("The test server did not bind to any address.");
 
             var source = new PackageSource(indexUrl);

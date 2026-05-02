@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.IO.Compression;
 using System.Text.Json;
+using Arbor.DevPackages.Core.Feeds;
 using Arbor.DevPackages.Core.Packages;
 using Arbor.DevPackages.Core.Proxy;
 using Arbor.DevPackages.Core.Statistics;
@@ -73,7 +74,7 @@ public sealed class FlatContainerTests : IClassFixture<WebApplicationFactory<Pro
         using var factory = BuildFactory(StoreWithTestPackage());
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/v3/flatcontainer/serilog/index.json");
+        var response = await client.GetAsync("/feeds/default/v3/flatcontainer/serilog/index.json");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -91,7 +92,7 @@ public sealed class FlatContainerTests : IClassFixture<WebApplicationFactory<Pro
         using var factory = BuildFactory();
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/v3/flatcontainer/unknown-package/index.json");
+        var response = await client.GetAsync("/feeds/default/v3/flatcontainer/unknown-package/index.json");
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -105,7 +106,7 @@ public sealed class FlatContainerTests : IClassFixture<WebApplicationFactory<Pro
         var client = factory.CreateClient();
 
         var response = await client.GetAsync(
-            "/v3/flatcontainer/serilog/3.1.1/serilog.3.1.1.nupkg");
+            "/feeds/default/v3/flatcontainer/serilog/3.1.1/serilog.3.1.1.nupkg");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         response.Content.Headers.ContentType?.MediaType.Should().Be("application/octet-stream");
@@ -122,7 +123,7 @@ public sealed class FlatContainerTests : IClassFixture<WebApplicationFactory<Pro
         var client = factory.CreateClient();
 
         var response = await client.GetAsync(
-            "/v3/flatcontainer/unknown/1.0.0/unknown.1.0.0.nupkg");
+            "/feeds/default/v3/flatcontainer/unknown/1.0.0/unknown.1.0.0.nupkg");
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -135,14 +136,14 @@ public sealed class FlatContainerTests : IClassFixture<WebApplicationFactory<Pro
 
         // First request to get the ETag.
         var first = await client.GetAsync(
-            "/v3/flatcontainer/serilog/3.1.1/serilog.3.1.1.nupkg");
+            "/feeds/default/v3/flatcontainer/serilog/3.1.1/serilog.3.1.1.nupkg");
         var etag = first.Headers.ETag?.Tag;
         etag.Should().NotBeNullOrEmpty();
 
         // Second request with matching If-None-Match.
         var request = new HttpRequestMessage(
             HttpMethod.Get,
-            "/v3/flatcontainer/serilog/3.1.1/serilog.3.1.1.nupkg");
+            "/feeds/default/v3/flatcontainer/serilog/3.1.1/serilog.3.1.1.nupkg");
         request.Headers.Add("If-None-Match", etag!);
         var second = await client.SendAsync(request);
 
@@ -156,7 +157,7 @@ public sealed class FlatContainerTests : IClassFixture<WebApplicationFactory<Pro
         using var factory = BuildFactory(StoreWithTestPackage(), collector);
         var client = factory.CreateClient();
 
-        await client.GetAsync("/v3/flatcontainer/serilog/3.1.1/serilog.3.1.1.nupkg");
+        await client.GetAsync("/feeds/default/v3/flatcontainer/serilog/3.1.1/serilog.3.1.1.nupkg");
 
         collector.RecordedEvents.Should().HaveCount(1);
         var evt = collector.RecordedEvents[0];
@@ -173,7 +174,7 @@ public sealed class FlatContainerTests : IClassFixture<WebApplicationFactory<Pro
         var client = factory.CreateClient();
 
         var response = await client.GetAsync(
-            "/v3/flatcontainer/serilog/3.1.1/serilog.3.1.1.nuspec");
+            "/feeds/default/v3/flatcontainer/serilog/3.1.1/serilog.3.1.1.nuspec");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         response.Content.Headers.ContentType?.MediaType.Should().Be("application/xml");
@@ -219,18 +220,22 @@ public sealed class FlatContainerTests : IClassFixture<WebApplicationFactory<Pro
         Arbor.DevPackages.ServiceDefaults.Extensions.AddServiceDefaults(builder);
         builder.Services.AddSingleton<IPackageStore>(store);
         builder.Services.AddSingleton<IStatisticsCollector>(collector);
+        builder.Services.AddSingleton<IFeedRouter>(
+            new Arbor.DevPackages.Core.Feeds.FeedRouter(
+                [new FeedConfiguration("default", new Uri("https://api.nuget.org/v3/flatcontainer"))]));
 
         await using var app = builder.Build();
         Arbor.DevPackages.ServiceDefaults.Extensions.MapDefaultEndpoints(app);
-        ServiceIndexEndpoints.MapServiceIndex(app);
-        FlatContainerEndpoints.MapFlatContainer(app);
+        var feedsGroup = app.MapGroup("/feeds/{feedId}");
+        ServiceIndexEndpoints.MapServiceIndex(feedsGroup);
+        FlatContainerEndpoints.MapFlatContainer(feedsGroup);
 
         await app.StartAsync();
 
         try
         {
             var indexUrl = app.Urls.FirstOrDefault() is { } url
-                ? $"{url}/v3/index.json"
+                ? $"{url}/feeds/default/v3/index.json"
                 : throw new InvalidOperationException("The test server did not bind to any address.");
 
             var source = new PackageSource(indexUrl);
