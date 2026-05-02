@@ -77,6 +77,13 @@ Arbor.DevPackages uses the following third-party packages. Each package retains 
 
 ## Test Dependencies
 
+### Arbor.Aesculus.NCrunch
+
+- **Version:** 3.9.0
+- **License:** MIT
+- **Project:** https://github.com/niklaslundberg/Arbor.Aesculus
+- **Used in:** `Arbor.DevPackages.SystemTests` (NCrunch-compatible VCS root path discovery)
+
 ### AwesomeAssertions
 
 - **Version:** 9.4.0
