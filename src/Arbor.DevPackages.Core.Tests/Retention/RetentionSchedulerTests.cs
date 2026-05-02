@@ -153,6 +153,9 @@ public sealed class RetentionSchedulerTests
 
         public Task<DateTimeOffset?> GetLastDownloadedAtAcrossAllPackagesAsync(CancellationToken cancellationToken)
             => Task.FromResult(_globalLastDownload);
+
+        public Task<IReadOnlyList<PackageStatsSummary>> GetAllPackageStatsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<PackageStatsSummary>>([]);
     }
 
     private sealed class FakeTimeProvider(DateTimeOffset utcNow) : TimeProvider
