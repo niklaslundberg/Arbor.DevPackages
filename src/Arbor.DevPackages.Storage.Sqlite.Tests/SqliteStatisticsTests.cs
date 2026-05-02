@@ -22,10 +22,7 @@ public sealed class SqliteStatisticsTests : IAsyncLifetime
         _reader = new SqliteStatisticsReader(_connection);
     }
 
-    public async ValueTask DisposeAsync()
-    {
-        await _connection.DisposeAsync();
-    }
+    public ValueTask DisposeAsync() => _connection.DisposeAsync();
 
     [Fact]
     public async Task RecordDownload_NewPackage_InsertsRow()
