@@ -34,7 +34,9 @@ if (feedsSection.Exists())
         var id = section["Id"] ?? throw new InvalidOperationException("Each feed entry requires an 'Id'.");
         var url = section["UpstreamUrl"] ?? throw new InvalidOperationException($"Feed '{id}' requires an 'UpstreamUrl'.");
         var allowPrerelease = section.GetValue<bool>("AllowPrerelease");
-        feeds.Add(new FeedConfiguration(id, new Uri(url), AllowPrerelease: allowPrerelease));
+        var searchUrlString = section["SearchUrl"];
+        var searchUrl = searchUrlString is not null ? new Uri(searchUrlString) : null;
+        feeds.Add(new FeedConfiguration(id, new Uri(url), AllowPrerelease: allowPrerelease, SearchUrl: searchUrl));
     }
 }
 

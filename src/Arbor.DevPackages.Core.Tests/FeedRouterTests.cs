@@ -63,4 +63,54 @@ public class FeedRouterTests
         resultB.Should().NotBeNull();
         resultB!.AllowPrerelease.Should().BeFalse();
     }
+
+    // ─── Startup validation ───────────────────────────────────────────────────
+
+    [Fact]
+    public void Constructor_DuplicateFeedIds_ThrowsInvalidOperationException()
+    {
+        var feeds = new[]
+        {
+            new FeedConfiguration("my-feed", NuGetOrg),
+            new FeedConfiguration("MY-FEED", new Uri("https://other.example.com/"))
+        };
+
+        Action act = () => _ = new FeedRouter(feeds);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Duplicate feed ID*");
+    }
+
+    [Fact]
+    public void Constructor_FeedIdContainsSlash_ThrowsInvalidOperationException()
+    {
+        var feeds = new[] { new FeedConfiguration("bad/feed", NuGetOrg) };
+
+        Action act = () => _ = new FeedRouter(feeds);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*invalid character '/'*");
+    }
+
+    [Fact]
+    public void Constructor_FeedIdContainsQuestionMark_ThrowsInvalidOperationException()
+    {
+        var feeds = new[] { new FeedConfiguration("bad?feed", NuGetOrg) };
+
+        Action act = () => _ = new FeedRouter(feeds);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*invalid character '?'*");
+    }
+
+    [Fact]
+    public void Constructor_EmptyFeedId_ThrowsInvalidOperationException()
+    {
+        var feeds = new[] { new FeedConfiguration("   ", NuGetOrg) };
+
+        Action act = () => _ = new FeedRouter(feeds);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*empty or whitespace*");
+    }
 }

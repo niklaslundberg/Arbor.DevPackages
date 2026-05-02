@@ -26,7 +26,8 @@ public static class ServiceIndexEndpoints
             return Results.NotFound();
         }
 
-        var baseUrl = $"{context.Request.Scheme}://{context.Request.Host}{context.Request.PathBase}/feeds/{feedId}";
+        var canonicalFeedId = Uri.EscapeDataString(feed.FeedId);
+        var baseUrl = $"{context.Request.Scheme}://{context.Request.Host}{context.Request.PathBase}/feeds/{canonicalFeedId}";
 
         var index = new ServiceIndexResponse(
             Version: "3.0.0",

@@ -54,7 +54,7 @@ public static class RegistrationEndpoints
             }
         }
 
-        var baseUrl = $"{context.Request.Scheme}://{context.Request.Host}{context.Request.PathBase}/feeds/{feedId}";
+        var baseUrl = $"{context.Request.Scheme}://{context.Request.Host}{context.Request.PathBase}/feeds/{Uri.EscapeDataString(feed.FeedId)}";
         var response = RegistrationIndexBuilder.BuildIndex(baseUrl, id, metadataItems);
 
         return Results.Json(response, contentType: "application/json");
@@ -86,7 +86,7 @@ public static class RegistrationEndpoints
             return Results.NotFound();
         }
 
-        var baseUrl = $"{context.Request.Scheme}://{context.Request.Host}{context.Request.PathBase}/feeds/{feedId}";
+        var baseUrl = $"{context.Request.Scheme}://{context.Request.Host}{context.Request.PathBase}/feeds/{Uri.EscapeDataString(feed.FeedId)}";
         var response = RegistrationIndexBuilder.BuildLeaf(baseUrl, metadata);
 
         return Results.Json(response, contentType: "application/json");
