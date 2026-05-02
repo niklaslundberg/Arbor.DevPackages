@@ -53,12 +53,12 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
             }));
     }
 
-    private static byte[] CreateNupkgBytes(string nuspecContent)
+    private static byte[] CreateNupkgBytes(string nuspecContent, string? entryName = null)
     {
         using var ms = new MemoryStream();
         using (var archive = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
         {
-            var entry = archive.CreateEntry("testpackage.1.0.0.nuspec");
+            var entry = archive.CreateEntry(entryName ?? "testpackage.1.0.0.nuspec");
             using var writer = new StreamWriter(entry.Open(), Encoding.UTF8);
             writer.Write(nuspecContent);
         }
@@ -66,12 +66,12 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
         return ms.ToArray();
     }
 
-    private static MultipartFormDataContent CreatePushContent(byte[] nupkgBytes)
+    private static MultipartFormDataContent CreatePushContent(byte[] nupkgBytes, string filename = "testpackage.1.0.0.nupkg")
     {
         var content = new MultipartFormDataContent();
         var fileContent = new ByteArrayContent(nupkgBytes);
         fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
-        content.Add(fileContent, "package", "testpackage.1.0.0.nupkg");
+        content.Add(fileContent, "package", filename);
         return content;
     }
 
@@ -155,18 +155,8 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
         using var factory = BuildFactory(allowPush: true, allowPrerelease: false);
         var client = factory.CreateClient();
 
-        using var ms = new MemoryStream();
-        using (var archive = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
-        {
-            var entry = archive.CreateEntry("testpackage.1.0.0-beta.1.nuspec");
-            using var writer = new StreamWriter(entry.Open(), Encoding.UTF8);
-            writer.Write(TestPrereleaseNuspec);
-        }
-
-        using var content = new MultipartFormDataContent();
-        var fileContent = new ByteArrayContent(ms.ToArray());
-        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
-        content.Add(fileContent, "package", "testpackage.1.0.0-beta.1.nupkg");
+        var nupkgBytes = CreateNupkgBytes(TestPrereleaseNuspec, "testpackage.1.0.0-beta.1.nuspec");
+        using var content = CreatePushContent(nupkgBytes, "testpackage.1.0.0-beta.1.nupkg");
 
         var response = await client.PutAsync("/feeds/default/v3/push", content);
 
@@ -182,18 +172,8 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
         using var factory = BuildFactory(store, allowPush: true, allowPrerelease: true);
         var client = factory.CreateClient();
 
-        using var ms = new MemoryStream();
-        using (var archive = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
-        {
-            var entry = archive.CreateEntry("testpackage.1.0.0-beta.1.nuspec");
-            using var writer = new StreamWriter(entry.Open(), Encoding.UTF8);
-            writer.Write(TestPrereleaseNuspec);
-        }
-
-        using var content = new MultipartFormDataContent();
-        var fileContent = new ByteArrayContent(ms.ToArray());
-        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
-        content.Add(fileContent, "package", "testpackage.1.0.0-beta.1.nupkg");
+        var nupkgBytes = CreateNupkgBytes(TestPrereleaseNuspec, "testpackage.1.0.0-beta.1.nuspec");
+        using var content = CreatePushContent(nupkgBytes, "testpackage.1.0.0-beta.1.nupkg");
 
         var response = await client.PutAsync("/feeds/default/v3/push", content);
 
@@ -215,6 +195,33 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
         // Upload random bytes that are not a valid ZIP file.
         using var content = new MultipartFormDataContent();
         var fileContent = new ByteArrayContent("this is not a zip file"u8.ToArray());
+        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+        content.Add(fileContent, "package", "invalid.1.0.0.nupkg");
+
+        var response = await client.PutAsync("/feeds/default/v3/push", content);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    // ─── PushPackage_MissingNuspec ────────────────────────────────────────────
+
+    [Fact]
+    public async Task PushPackage_ZipWithoutNuspec_Returns400()
+    {
+        using var factory = BuildFactory(allowPush: true);
+        var client = factory.CreateClient();
+
+        // Build a valid ZIP that contains no .nuspec entry.
+        using var ms = new MemoryStream();
+        using (var archive = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var entry = archive.CreateEntry("somefile.txt");
+            using var writer = new StreamWriter(entry.Open(), Encoding.UTF8);
+            writer.Write("not a nuspec");
+        }
+
+        using var content = new MultipartFormDataContent();
+        var fileContent = new ByteArrayContent(ms.ToArray());
         fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
         content.Add(fileContent, "package", "invalid.1.0.0.nupkg");
 
@@ -262,7 +269,7 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
             """;
 
         // Build a minimal valid nupkg zip containing the nuspec.
-        var nupkgBytes = CreateNupkgBytesWithNuspec("pushprotocoltest.2.0.0.nuspec", pushNuspec);
+        var nupkgBytes = CreateNupkgBytes(pushNuspec, "pushprotocoltest.2.0.0.nuspec");
 
         // Write to a temp file so PackageUpdateResource can read it.
         var tmpNupkg = Path.Combine(Path.GetTempPath(), $"pushprotocoltest.2.0.0.{Guid.NewGuid():N}.nupkg");
@@ -331,87 +338,5 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
                 File.Delete(tmpNupkg);
             }
         }
-    }
-
-    private static byte[] CreateNupkgBytesWithNuspec(string entryName, string nuspecContent)
-    {
-        using var ms = new MemoryStream();
-        using (var archive = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
-        {
-            var entry = archive.CreateEntry(entryName);
-            using var writer = new StreamWriter(entry.Open(), Encoding.UTF8);
-            writer.Write(nuspecContent);
-        }
-
-        return ms.ToArray();
-    }
-}
-
-/// <summary>
-/// Unit tests for <see cref="PushEndpoints.ExtractPackageIdentity"/>.
-/// </summary>
-public sealed class ExtractPackageIdentityTests
-{
-    [Fact]
-    public void ExtractPackageIdentity_StandardNuspec_ReturnsLowercasedIdAndOriginalVersion()
-    {
-        const string nuspec =
-            "<package><metadata><id>MyPackage</id><version>1.2.3</version></metadata></package>";
-
-        var identity = PushEndpoints.ExtractPackageIdentity(nuspec);
-
-        identity.Id.Should().Be("mypackage");
-        identity.Version.Should().Be("1.2.3");
-    }
-
-    [Fact]
-    public void ExtractPackageIdentity_NuspecWithNamespace_ReturnsIdentity()
-    {
-        const string nuspec = """
-            <?xml version="1.0" encoding="utf-8"?>
-            <package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
-              <metadata>
-                <id>SomePackage</id>
-                <version>2.0.0</version>
-              </metadata>
-            </package>
-            """;
-
-        var identity = PushEndpoints.ExtractPackageIdentity(nuspec);
-
-        identity.Id.Should().Be("somepackage");
-        identity.Version.Should().Be("2.0.0");
-    }
-
-    [Fact]
-    public void ExtractPackageIdentity_MissingId_ThrowsFormatException()
-    {
-        const string nuspec =
-            "<package><metadata><version>1.0.0</version></metadata></package>";
-
-        var act = () => PushEndpoints.ExtractPackageIdentity(nuspec);
-
-        act.Should().Throw<FormatException>();
-    }
-
-    [Fact]
-    public void ExtractPackageIdentity_MissingVersion_ThrowsFormatException()
-    {
-        const string nuspec =
-            "<package><metadata><id>MyPackage</id></metadata></package>";
-
-        var act = () => PushEndpoints.ExtractPackageIdentity(nuspec);
-
-        act.Should().Throw<FormatException>();
-    }
-
-    [Fact]
-    public void ExtractPackageIdentity_InvalidXml_ThrowsFormatException()
-    {
-        const string nuspec = "not valid xml <<>";
-
-        var act = () => PushEndpoints.ExtractPackageIdentity(nuspec);
-
-        act.Should().Throw<FormatException>();
     }
 }

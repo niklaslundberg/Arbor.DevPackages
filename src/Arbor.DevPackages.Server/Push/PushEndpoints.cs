@@ -1,14 +1,13 @@
-using System.IO.Compression;
 using System.Net;
 using System.Text;
-using System.Xml;
-using System.Xml.Linq;
 using Arbor.DevPackages.Core.Feeds;
 using Arbor.DevPackages.Core.Packages;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using NuGet.Versioning;
+using NuGet.Packaging;
+using NuGet.Packaging.Core;
+using PackageIdentity = Arbor.DevPackages.Core.Packages.PackageIdentity;
 
 namespace Arbor.DevPackages.Server.Push;
 
@@ -60,7 +59,7 @@ public static class PushEndpoints
         // NuGet clients typically name the file field "package" or use the filename.
         var file = form.Files["package"] ?? form.Files[0];
 
-        // Buffer the nupkg so we can read it twice: once for nuspec extraction and once for storage.
+        // Buffer the nupkg so we can read it twice: once for identity extraction and once for storage.
         using var nupkgBuffer = new MemoryStream();
         await using (var uploadStream = file.OpenReadStream())
         {
@@ -69,52 +68,48 @@ public static class PushEndpoints
 
         nupkgBuffer.Position = 0;
 
-        // Extract the nuspec from the nupkg (which is a ZIP file).
+        // Extract the package identity and nuspec content using the official NuGet.Packaging reader.
         string nuspecContent;
         PackageIdentity identity;
 
         try
         {
-            using var archive = new ZipArchive(nupkgBuffer, ZipArchiveMode.Read, leaveOpen: true);
-            var nuspecEntry = archive.Entries
-                .FirstOrDefault(e => e.Name.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase));
+            using var archiveReader = new PackageArchiveReader(nupkgBuffer, leaveStreamOpen: true);
+            var nuspecReader = archiveReader.NuspecReader;
+            var nugetIdentity = nuspecReader.GetIdentity();
 
-            if (nuspecEntry is null)
-            {
-                return Results.BadRequest("No .nuspec file found in the package.");
-            }
+            identity = new PackageIdentity(
+                nugetIdentity.Id.ToLowerInvariant(),
+                nugetIdentity.Version.ToNormalizedString());
 
-            await using var nuspecEntryStream = nuspecEntry.Open();
-            using var reader = new StreamReader(nuspecEntryStream, Encoding.UTF8);
+            await using var nuspecStream = archiveReader.GetNuspec();
+            using var reader = new StreamReader(nuspecStream, Encoding.UTF8);
             nuspecContent = await reader.ReadToEndAsync(cancellationToken);
-
-            identity = ExtractPackageIdentity(nuspecContent);
         }
         catch (InvalidDataException)
         {
             return Results.BadRequest("The uploaded file is not a valid NuGet package.");
         }
-        catch (FormatException ex)
+        catch (PackagingException ex)
         {
             return Results.BadRequest(ex.Message);
         }
 
-        // Reject the package if the version cannot be parsed as a valid NuGet version.
-        if (!NuGetVersion.TryParse(identity.Version, out var nugetVersion))
+        // Reject pre-release packages if the feed does not allow them.
+        if (!NuGet.Versioning.NuGetVersion.TryParse(identity.Version, out var nugetVersion))
         {
             return Results.BadRequest($"The version '{identity.Version}' is not a valid NuGet version.");
         }
 
-        // Reject pre-release packages if the feed does not allow them.
         if (nugetVersion.IsPrerelease && !feed.AllowPrerelease)
         {
             return Results.StatusCode(StatusCodes.Status422UnprocessableEntity);
         }
 
         nupkgBuffer.Position = 0;
-        using var nuspecStream = new MemoryStream(Encoding.UTF8.GetBytes(nuspecContent));
+        using var storedNuspecStream = new MemoryStream(Encoding.UTF8.GetBytes(nuspecContent));
 
-        var result = await store.StoreAsync(identity, nupkgBuffer, nuspecStream, cancellationToken);
+        var result = await store.StoreAsync(identity, nupkgBuffer, storedNuspecStream, cancellationToken);
 
         return result switch
         {
@@ -122,31 +117,5 @@ public static class PushEndpoints
             PackageStoreResult.AlreadyExists => Results.Conflict(),
             _ => Results.Problem(statusCode: StatusCodes.Status500InternalServerError)   // coverage: unreachable
         };
-    }
-
-    internal static PackageIdentity ExtractPackageIdentity(string nuspecContent)
-    {
-        XDocument doc;
-        try
-        {
-            doc = XDocument.Parse(nuspecContent);
-        }
-        catch (XmlException ex)
-        {
-            throw new FormatException("The .nuspec file is not valid XML.", ex);
-        }
-
-        // Use LocalName to support any NuGet nuspec namespace variant.
-        string id = doc.Descendants()
-            .FirstOrDefault(e => e.Name.LocalName == "id")?.Value ?? "";
-        string version = doc.Descendants()
-            .FirstOrDefault(e => e.Name.LocalName == "version")?.Value ?? "";
-
-        if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(version))
-        {
-            throw new FormatException("The .nuspec file is missing the required 'id' or 'version' element.");
-        }
-
-        return new PackageIdentity(id.ToLowerInvariant(), version);
     }
 }

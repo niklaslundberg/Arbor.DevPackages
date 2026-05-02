@@ -8,6 +8,7 @@
     </AssemblyAttribute>
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="NuGet.Packaging" />
     <PackageReference Include="NuGet.Versioning" />
     <ProjectReference Include="..\Arbor.DevPackages.Core\Arbor.DevPackages.Core.csproj" />
     <ProjectReference Include="..\Arbor.DevPackages.ServiceDefaults\Arbor.DevPackages.ServiceDefaults.csproj" />
