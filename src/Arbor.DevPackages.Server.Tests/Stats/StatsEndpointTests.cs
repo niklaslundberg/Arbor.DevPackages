@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using Arbor.DevPackages.Core.Packages;
 using Arbor.DevPackages.Core.Statistics;
+using Arbor.DevPackages.Testing;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -76,24 +77,4 @@ public sealed class StatsEndpointTests : IClassFixture<WebApplicationFactory<Pro
     }
 
     // ─── Fakes ────────────────────────────────────────────────────────────────
-
-    private sealed class FakeStatisticsReader : IStatisticsReader
-    {
-        private readonly IReadOnlyList<PackageStatsSummary> _summaries;
-
-        public FakeStatisticsReader(IReadOnlyList<PackageStatsSummary> summaries) =>
-            _summaries = summaries;
-
-        public Task<long> GetDownloadCountAsync(PackageIdentity identity, CancellationToken cancellationToken) =>
-            Task.FromResult(0L);
-
-        public Task<DateTimeOffset?> GetLastDownloadedAtAsync(PackageIdentity identity, CancellationToken cancellationToken) =>
-            Task.FromResult<DateTimeOffset?>(null);
-
-        public Task<DateTimeOffset?> GetLastDownloadedAtAcrossAllPackagesAsync(CancellationToken cancellationToken) =>
-            Task.FromResult<DateTimeOffset?>(null);
-
-        public Task<IReadOnlyList<PackageStatsSummary>> GetAllPackageStatsAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(_summaries);
-    }
 }
