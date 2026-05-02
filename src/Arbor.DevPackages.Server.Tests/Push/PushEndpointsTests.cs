@@ -289,11 +289,12 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
 
             await app.StartAsync();
 
+            var boundUrl = app.Urls.FirstOrDefault()
+                ?? throw new InvalidOperationException("The test server did not bind to any address.");
+
             try
             {
-                var indexUrl = app.Urls.FirstOrDefault() is { } url
-                    ? $"{url}/feeds/local/v3/index.json"
-                    : throw new InvalidOperationException("The test server did not bind to any address.");
+                var indexUrl = $"{boundUrl}/feeds/local/v3/index.json";
 
                 var source = new PackageSource(indexUrl);
                 var repository = Repository.Factory.GetCoreV3(source);
@@ -325,7 +326,10 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
         }
         finally
         {
-            File.Delete(tmpNupkg);
+            if (File.Exists(tmpNupkg))
+            {
+                File.Delete(tmpNupkg);
+            }
         }
     }
 
