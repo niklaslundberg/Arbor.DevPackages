@@ -5,7 +5,7 @@ namespace Arbor.DevPackages.SystemTests;
 /// <summary>
 /// Runs <c>dotnet restore</c> against the test server as a subprocess.
 /// Each call is fully isolated: a fresh NuGet global packages cache and project directory
-/// are created in a temp folder and deleted on disposal.
+/// are created in a temp folder and cleaned up in a <c>finally</c> block after the restore completes.
 /// </summary>
 public sealed class NuGetRestoreRunner
 {

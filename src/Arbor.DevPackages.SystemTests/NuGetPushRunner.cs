@@ -4,7 +4,7 @@ namespace Arbor.DevPackages.SystemTests;
 
 /// <summary>
 /// Runs <c>dotnet nuget push</c> against the test server as a subprocess.
-/// Each call is fully isolated: a fresh temp directory is created and deleted after the push.
+/// Each call pushes the provided package file path directly; no temporary directory is created.
 /// </summary>
 public sealed class NuGetPushRunner
 {

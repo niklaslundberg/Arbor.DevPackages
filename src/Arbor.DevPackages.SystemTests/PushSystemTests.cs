@@ -84,11 +84,14 @@ public sealed class PushSystemTests
                 because: $"first push should succeed. stdout: {firstPush.Output} stderr: {firstPush.Error}");
 
             // Second push of the same package — must fail with a non-zero exit code
-            // (the NuGet CLI maps HTTP 409 to a non-zero exit code).
+            // (the NuGet CLI maps HTTP 409 to a non-zero exit code) and emit "409" in its output.
             var secondPush = await NuGetPushRunner.RunAsync(fixture.Port, nupkgPath);
             secondPush.ExitCode.Should().NotBe(
                 0,
                 because: "pushing a duplicate package should fail (HTTP 409 → non-zero exit code)");
+            (secondPush.Output + secondPush.Error).Should().Contain(
+                "409",
+                because: "the NuGet CLI should report the HTTP 409 Conflict status code");
         }
         finally
         {
@@ -112,6 +115,7 @@ public sealed class PushSystemTests
         await fixture.InitializeAsync();
 
         var nupkgPath = CreateMinimalNupkgFile(PushTestPackageId, PushTestPackageVersion);
+        using var http = new HttpClient();
 
         try
         {
@@ -122,6 +126,17 @@ public sealed class PushSystemTests
                 0,
                 because: $"pushing to a read-only feed should fail. " +
                           $"stdout: {pushResult.Output} stderr: {pushResult.Error}");
+
+            // When AllowPush=false the service index omits the push resource, so the NuGet CLI
+            // reports "does not support updating packages" rather than "403". Verify 403 directly
+            // by sending a push request to the endpoint and checking the HTTP status code.
+            var pushEndpointUrl = $"{fixture.BaseAddress}/feeds/nuget-org/v3/push";
+            using var content = new ByteArrayContent([]);
+            content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+            var httpResponse = await http.PutAsync(pushEndpointUrl, content);
+            httpResponse.StatusCode.Should().Be(
+                HttpStatusCode.Forbidden,
+                because: "the push endpoint must return 403 Forbidden for a read-only feed");
         }
         finally
         {

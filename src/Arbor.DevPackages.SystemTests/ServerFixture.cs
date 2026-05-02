@@ -16,6 +16,9 @@ public sealed class ServerFixture : IAsyncLifetime
 
     private Process? _process;
     private string? _storeDirectory;
+    private readonly object _outputLock = new();
+    private readonly System.Text.StringBuilder _serverOutput = new();
+    private readonly System.Text.StringBuilder _serverError = new();
 
     /// <summary>Gets the base address of the started server (e.g. <c>http://localhost:54321</c>).</summary>
     public string BaseAddress { get; private set; } = null!;
@@ -91,6 +94,13 @@ public sealed class ServerFixture : IAsyncLifetime
         _process = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start Arbor.DevPackages.Server process.");
 
+        // Drain stdout and stderr asynchronously to avoid blocking the child process when
+        // the pipe buffers fill up. The captured text is included in failure diagnostics.
+        _process.OutputDataReceived += (_, e) => { if (e.Data is not null) { lock (_outputLock) _serverOutput.AppendLine(e.Data); } };
+        _process.ErrorDataReceived += (_, e) => { if (e.Data is not null) { lock (_outputLock) _serverError.AppendLine(e.Data); } };
+        _process.BeginOutputReadLine();
+        _process.BeginErrorReadLine();
+
         await WaitForHealthyAsync();
     }
 
@@ -141,12 +151,13 @@ public sealed class ServerFixture : IAsyncLifetime
             {
                 throw new InvalidOperationException(
                     $"Server process exited unexpectedly with code {_process.ExitCode} " +
-                    "before becoming healthy.");
+                    "before becoming healthy. " +
+                    $"stdout: {_serverOutput} stderr: {_serverError}");
             }
 
             try
             {
-                var response = await httpClient.GetAsync($"{BaseAddress}/health");
+                using var response = await httpClient.GetAsync($"{BaseAddress}/health");
                 if (response.StatusCode == HttpStatusCode.OK)
                 {
                     return;
@@ -161,7 +172,8 @@ public sealed class ServerFixture : IAsyncLifetime
         }
 
         throw new TimeoutException(
-            $"Server at {BaseAddress}/health did not become healthy within {HealthCheckTimeoutSeconds} seconds.");
+            $"Server at {BaseAddress}/health did not become healthy within {HealthCheckTimeoutSeconds} seconds. " +
+            $"stdout: {_serverOutput} stderr: {_serverError}");
     }
 
     private static void SeedStore(string storeDirectory)
@@ -198,31 +210,59 @@ public sealed class ServerFixture : IAsyncLifetime
 
     /// <summary>
     /// Locates the server executable from the test output directory.
-    /// Layout (UseArtifactsOutput=true):
-    ///   artifacts/bin/Arbor.DevPackages.SystemTests/{config}/  ← AppContext.BaseDirectory
-    ///   artifacts/bin/Arbor.DevPackages.Server/{config}/       ← server binary
+    /// Handles both artifact layouts produced by <c>UseArtifactsOutput=true</c>:
+    /// <list type="bullet">
+    ///   <item><description><c>artifacts/bin/{project}/{config}/</c> — no TFM sub-folder (current layout)</description></item>
+    ///   <item><description><c>artifacts/bin/{project}/{config}/{tfm}/</c> — with TFM sub-folder</description></item>
+    /// </list>
     /// </summary>
     private static string FindServerExecutable()
     {
         var baseDir = AppContext.BaseDirectory.TrimEnd(
             Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var configName = Path.GetFileName(baseDir);                         // "debug" or "release"
-        var binDir = Path.GetDirectoryName(Path.GetDirectoryName(baseDir))!; // artifacts/bin/
 
         var exeName = OperatingSystem.IsWindows()
             ? "Arbor.DevPackages.Server.exe"
             : "Arbor.DevPackages.Server";
 
-        var exePath = Path.Combine(binDir, "Arbor.DevPackages.Server", configName, exeName);
-
-        if (!File.Exists(exePath))
+        // Layout 1 (no TFM): AppContext.BaseDirectory = artifacts/bin/{project}/{config}/
+        //   configName = last segment ("release" / "debug")
+        //   binDir     = two levels up  → artifacts/bin/
+        var configName1 = Path.GetFileName(baseDir);
+        var binDir1 = Path.GetDirectoryName(Path.GetDirectoryName(baseDir));
+        if (binDir1 is not null)
         {
-            throw new FileNotFoundException(
-                $"Server executable not found at '{exePath}'. Build the solution before running system tests.",
-                exePath);
+            var candidate1 = Path.Combine(binDir1, "Arbor.DevPackages.Server", configName1, exeName);
+            if (File.Exists(candidate1))
+            {
+                return candidate1;
+            }
         }
 
-        return exePath;
+        // Layout 2 (with TFM): AppContext.BaseDirectory = artifacts/bin/{project}/{config}/{tfm}/
+        //   tfmName    = last segment ("net10.0")
+        //   configName = second-to-last segment ("release" / "debug")
+        //   binDir     = three levels up → artifacts/bin/
+        var tfmName = Path.GetFileName(baseDir);
+        var configParent = Path.GetDirectoryName(baseDir);
+        if (configParent is not null)
+        {
+            var configName2 = Path.GetFileName(configParent);
+            var binDir2 = Path.GetDirectoryName(Path.GetDirectoryName(configParent));
+            if (binDir2 is not null)
+            {
+                var candidate2 = Path.Combine(binDir2, "Arbor.DevPackages.Server", configName2, tfmName, exeName);
+                if (File.Exists(candidate2))
+                {
+                    return candidate2;
+                }
+            }
+        }
+
+        throw new FileNotFoundException(
+            $"Server executable not found. Searched near '{AppContext.BaseDirectory}'. " +
+            "Build the solution before running system tests.",
+            exeName);
     }
 
     private static int GetFreePort()
