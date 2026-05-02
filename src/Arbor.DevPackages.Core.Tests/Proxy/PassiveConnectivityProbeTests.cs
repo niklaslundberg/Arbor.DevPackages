@@ -92,6 +92,30 @@ public sealed class PassiveConnectivityProbeTests
         afterExpiry.Should().BeTrue("should be reachable after back-off window elapses");
     }
 
+    // ─── Null UpstreamUrl ────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task IsReachableAsync_WhenFeedHasNoUpstreamUrl_ReturnsFalse()
+    {
+        var probe = new PassiveConnectivityProbe(ConnectivityProbeOptions.Default, TimeProvider.System);
+        var localFeed = new FeedConfiguration("local", UpstreamUrl: null);
+
+        bool reachable = await probe.IsReachableAsync(localFeed, CancellationToken.None);
+
+        reachable.Should().BeFalse("a feed with no upstream URL can never be reached");
+    }
+
+    [Fact]
+    public async Task RecordFailureAsync_WhenFeedHasNoUpstreamUrl_DoesNotThrow()
+    {
+        var probe = new PassiveConnectivityProbe(ConnectivityProbeOptions.Default, TimeProvider.System);
+        var localFeed = new FeedConfiguration("local", UpstreamUrl: null);
+
+        Func<Task> act = () => probe.RecordFailureAsync(localFeed, CancellationToken.None);
+
+        await act.Should().NotThrowAsync();
+    }
+
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
     /// <summary>

@@ -105,6 +105,32 @@ public sealed class FileSystemPackageStoreTests : IDisposable
         await act.Should().ThrowAsync<ArgumentException>();
     }
 
+    [Fact]
+    public async Task Store_WithRootedPathInId_ThrowsArgumentException()
+    {
+        // A rooted path (e.g. "/etc/passwd") should be rejected.
+        var maliciousIdentity = new PackageIdentity("/etc/passwd", "1.0.0");
+        using MemoryStream nupkg = MakeStream("content");
+        using MemoryStream nuspec = MakeStream("<package />");
+
+        Func<Task> act = () => _store.StoreAsync(maliciousIdentity, nupkg, nuspec, CancellationToken.None);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task Store_WithInvalidCharsInVersion_ThrowsArgumentException()
+    {
+        // A version string containing a forward slash (always invalid in file names) should be rejected.
+        var maliciousIdentity = new PackageIdentity("MyPkg", "1.0/evil");
+        using MemoryStream nupkg = MakeStream("content");
+        using MemoryStream nuspec = MakeStream("<package />");
+
+        Func<Task> act = () => _store.StoreAsync(maliciousIdentity, nupkg, nuspec, CancellationToken.None);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
     // ── OpenNupkg ────────────────────────────────────────────────────────────
 
     [Fact]
@@ -363,6 +389,94 @@ public sealed class FileSystemPackageStoreTests : IDisposable
         IReadOnlyList<PackageIdentity> result = await _store.ListAllAsync(CancellationToken.None);
 
         result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetMetadataAsync_MissingNuspecFile_ThrowsPackageIntegrityException()
+    {
+        using MemoryStream nupkg = MakeStream("fake-nupkg-content");
+        using MemoryStream nuspec = MakeStream("<package />");
+        await _store.StoreAsync(_identity, nupkg, nuspec, CancellationToken.None);
+
+        string id = _identity.Id.ToLowerInvariant();
+        string version = _identity.Version.ToLowerInvariant();
+        string nuspecPath = Path.Combine(_tempDir, id, version, $"{id}.{version}.nuspec");
+        File.Delete(nuspecPath);
+
+        Func<Task> act = () => _store.GetMetadataAsync(_identity, CancellationToken.None);
+
+        await act.Should().ThrowAsync<PackageIntegrityException>();
+    }
+
+    [Fact]
+    public async Task GetMetadataAsync_MissingSidecarFile_ThrowsPackageIntegrityException()
+    {
+        using MemoryStream nupkg = MakeStream("fake-nupkg-content");
+        using MemoryStream nuspec = MakeStream("<package />");
+        await _store.StoreAsync(_identity, nupkg, nuspec, CancellationToken.None);
+
+        string id = _identity.Id.ToLowerInvariant();
+        string version = _identity.Version.ToLowerInvariant();
+        string sha512Path = Path.Combine(_tempDir, id, version, $"{id}.{version}.sha512");
+        File.Delete(sha512Path);
+
+        Func<Task> act = () => _store.GetMetadataAsync(_identity, CancellationToken.None);
+
+        await act.Should().ThrowAsync<PackageIntegrityException>();
+    }
+
+    // ── GetStoredHashAsync ───────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetStoredHashAsync_StoredPackage_ReturnsHash()
+    {
+        using MemoryStream nupkg = MakeStream("fake-nupkg-content");
+        using MemoryStream nuspec = MakeStream("<package />");
+        await _store.StoreAsync(_identity, nupkg, nuspec, CancellationToken.None);
+
+        string? hash = await _store.GetStoredHashAsync(_identity, CancellationToken.None);
+
+        hash.Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task GetStoredHashAsync_MissingPackage_ReturnsNull()
+    {
+        string? hash = await _store.GetStoredHashAsync(_identity, CancellationToken.None);
+
+        hash.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetStoredHashAsync_MissingSidecarFile_ThrowsPackageIntegrityException()
+    {
+        using MemoryStream nupkg = MakeStream("fake-nupkg-content");
+        using MemoryStream nuspec = MakeStream("<package />");
+        await _store.StoreAsync(_identity, nupkg, nuspec, CancellationToken.None);
+
+        string id = _identity.Id.ToLowerInvariant();
+        string version = _identity.Version.ToLowerInvariant();
+        string sha512Path = Path.Combine(_tempDir, id, version, $"{id}.{version}.sha512");
+        File.Delete(sha512Path);
+
+        Func<Task> act = () => _store.GetStoredHashAsync(_identity, CancellationToken.None);
+
+        await act.Should().ThrowAsync<PackageIntegrityException>();
+    }
+
+    [Fact]
+    public async Task GetStoredHashAsync_MatchesHashStoredByStoreAsync()
+    {
+        byte[] nupkgBytes = Encoding.UTF8.GetBytes("fake-nupkg-content");
+        string expectedHash = Convert.ToHexStringLower(SHA512.HashData(nupkgBytes));
+
+        using MemoryStream nupkg = new(nupkgBytes);
+        using MemoryStream nuspec = MakeStream("<package />");
+        await _store.StoreAsync(_identity, nupkg, nuspec, CancellationToken.None);
+
+        string? hash = await _store.GetStoredHashAsync(_identity, CancellationToken.None);
+
+        hash.Should().Be(expectedHash);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
