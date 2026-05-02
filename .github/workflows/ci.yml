@@ -31,7 +31,7 @@ jobs:
         run: dotnet build Arbor.DevPackages.slnx --no-restore --configuration Release
 
       - name: Test
-        run: dotnet test Arbor.DevPackages.slnx --no-build --configuration Release --collect:"XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Threshold=80
+        run: dotnet test Arbor.DevPackages.slnx --no-build --configuration Release --filter "Category!=SystemTest_Online" --collect:"XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Threshold=80
 
       - name: Vulnerability audit
         run: dotnet list Arbor.DevPackages.slnx package --vulnerable --include-transitive
