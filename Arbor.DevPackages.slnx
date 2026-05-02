@@ -8,6 +8,7 @@
     <Project Path="src/Arbor.DevPackages.ServiceDefaults/Arbor.DevPackages.ServiceDefaults.csproj" />
     <Project Path="src/Arbor.DevPackages.Storage.Sqlite.Tests/Arbor.DevPackages.Storage.Sqlite.Tests.csproj" />
     <Project Path="src/Arbor.DevPackages.Storage.Sqlite/Arbor.DevPackages.Storage.Sqlite.csproj" />
+    <Project Path="src/Arbor.DevPackages.SystemTests/Arbor.DevPackages.SystemTests.csproj" />
     <Project Path="src/Arbor.DevPackages.Testing/Arbor.DevPackages.Testing.csproj" />
   </Folder>
 </Solution>

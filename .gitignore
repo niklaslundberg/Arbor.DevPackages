@@ -202,6 +202,8 @@ PublishScripts/
 
 # NuGet Packages
 *.nupkg
+# Allow committed test-asset packages under testdata/
+!testdata/**/*.nupkg
 # NuGet Symbol Packages
 *.snupkg
 # The packages folder can be ignored because of Package Restore
