@@ -81,7 +81,7 @@ public static class StartPageEndpoints
                 sb.AppendLine($"  <h3>{escapedFeedId}</h3>");
                 sb.AppendLine($"  <p><strong>NuGet Source URL:</strong> <code>{escapedServiceIndexUrl}</code></p>");
                 sb.AppendLine("  <p>Add this feed to your NuGet configuration:</p>");
-                sb.AppendLine($"  <pre>dotnet nuget add source {escapedServiceIndexUrl} --name {escapedFeedId}</pre>");
+                sb.AppendLine($"  <pre>dotnet nuget add source \"{escapedServiceIndexUrl}\" --name \"{escapedFeedId}\"</pre>");
 
                 if (feed.UpstreamUrl is not null)
                 {
@@ -95,7 +95,7 @@ public static class StartPageEndpoints
                     ? "<span class=\"badge badge-yes\">Yes</span>"
                     : "<span class=\"badge badge-no\">No</span>";
 
-                sb.AppendLine($"  <p><strong>Allow Pre-release:</strong> {allowPrerelease} &nbsp; <strong>Allow Push:</strong> {allowPush}</p>");
+                sb.AppendLine($"  <p><strong>Pre-release in search:</strong> {allowPrerelease} &nbsp; <strong>Allow Push:</strong> {allowPush}</p>");
                 sb.AppendLine("</div>");
             }
         }

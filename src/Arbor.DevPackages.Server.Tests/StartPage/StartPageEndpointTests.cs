@@ -3,6 +3,7 @@ using Arbor.DevPackages.Core.Feeds;
 using Arbor.DevPackages.Core.Packages;
 using Arbor.DevPackages.Core.Statistics;
 using Arbor.DevPackages.Server.StartPage;
+using Arbor.DevPackages.Testing;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -141,18 +142,29 @@ public sealed class StartPageEndpointTests : IClassFixture<WebApplicationFactory
         html.Should().Contain("/feeds/beta/v3/index.json");
     }
 
-    // ─── BuildHtml_HtmlEncodesSpecialCharactersInFeedId ───────────────────────
+    // ─── BuildHtml_HtmlEncodesAmpersandInFeedId ───────────────────────────────
 
     [Fact]
-    public void BuildHtml_HtmlEncodesSpecialCharactersInFeedId()
+    public void BuildHtml_HtmlEncodesAmpersandInFeedId()
     {
-        // Feed ID with characters that need HTML-encoding (< > &)
-        // Note: FeedRouter rejects '/' '?' '#' '%'; '&' '<' '>' are valid in a feed ID
-        // but must be HTML-encoded in the output.
         var feed = new FeedConfiguration("a&b", null);
         var html = StartPageEndpoints.BuildHtml([feed], [], "http://localhost:5000");
 
         html.Should().Contain("a&amp;b");
+        html.Should().NotContain("a&b\"");
+    }
+
+    // ─── BuildHtml_HtmlEncodesAngleBracketsInFeedId ───────────────────────────
+
+    [Fact]
+    public void BuildHtml_HtmlEncodesAngleBracketsInFeedId()
+    {
+        // '<' and '>' are valid feed ID characters (FeedRouter only rejects / ? # % and whitespace)
+        // but must be HTML-encoded in the output to prevent markup injection.
+        var feed = new FeedConfiguration("a<b>c", null);
+        var html = StartPageEndpoints.BuildHtml([feed], [], "http://localhost:5000");
+
+        html.Should().Contain("a&lt;b&gt;c");
         html.Should().NotContain("<script");
     }
 
@@ -178,25 +190,21 @@ public sealed class StartPageEndpointTests : IClassFixture<WebApplicationFactory
         html.Should().Contain("No feeds configured.");
     }
 
-    // ─── Fakes ────────────────────────────────────────────────────────────────
+    // ─── BuildHtml_WithNonUtcTimestamp_ShowsTimestampWithOffset ──────────────
 
-    private sealed class FakeStatisticsReader : IStatisticsReader
+    [Fact]
+    public void BuildHtml_WithNonUtcTimestamp_ShowsTimestampWithOffset()
     {
-        private readonly IReadOnlyList<PackageStatsSummary> _summaries;
+        // A +02:00 offset must be preserved and rendered in the output.
+        var offset = TimeSpan.FromHours(2);
+        var lastDownloadedAt = new DateTimeOffset(2026, 4, 29, 12, 0, 0, offset);
+        var identity = new PackageIdentity("TestPkg", "1.0.0");
+        var summary = new PackageStatsSummary(identity, DownloadCount: 1, LastDownloadedAt: lastDownloadedAt);
 
-        public FakeStatisticsReader(IReadOnlyList<PackageStatsSummary> summaries) =>
-            _summaries = summaries;
+        var html = StartPageEndpoints.BuildHtml([], [summary], "http://localhost:5000");
 
-        public Task<long> GetDownloadCountAsync(PackageIdentity identity, CancellationToken cancellationToken) =>
-            Task.FromResult(0L);
-
-        public Task<DateTimeOffset?> GetLastDownloadedAtAsync(PackageIdentity identity, CancellationToken cancellationToken) =>
-            Task.FromResult<DateTimeOffset?>(null);
-
-        public Task<DateTimeOffset?> GetLastDownloadedAtAcrossAllPackagesAsync(CancellationToken cancellationToken) =>
-            Task.FromResult<DateTimeOffset?>(null);
-
-        public Task<IReadOnlyList<PackageStatsSummary>> GetAllPackageStatsAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(_summaries);
+        // The rendered timestamp must include the +02:00 offset so that the displayed
+        // time is unambiguous — a regression to UTC-normalization would show +00:00.
+        html.Should().Contain("+02:00");
     }
 }
