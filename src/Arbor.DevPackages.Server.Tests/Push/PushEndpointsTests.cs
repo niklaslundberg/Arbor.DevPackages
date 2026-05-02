@@ -243,7 +243,7 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
 public sealed class ExtractPackageIdentityTests
 {
     [Fact]
-    public void ExtractPackageIdentity_StandardNuspec_ReturnsLowercasedIdentity()
+    public void ExtractPackageIdentity_StandardNuspec_ReturnsLowercasedIdAndOriginalVersion()
     {
         const string nuspec =
             "<package><metadata><id>MyPackage</id><version>1.2.3</version></metadata></package>";

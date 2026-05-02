@@ -133,6 +133,6 @@ public static class PushEndpoints
             throw new FormatException("The .nuspec file is missing the required 'id' or 'version' element.");
         }
 
-        return new PackageIdentity(id.ToLowerInvariant(), version.ToLowerInvariant());
+        return new PackageIdentity(id.ToLowerInvariant(), version);
     }
 }
