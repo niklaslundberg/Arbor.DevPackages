@@ -9,6 +9,7 @@ using Arbor.DevPackages.Server.Push;
 using Arbor.DevPackages.Server.Registration;
 using Arbor.DevPackages.Server.Search;
 using Arbor.DevPackages.Server.ServiceIndex;
+using Arbor.DevPackages.Server.StartPage;
 using Arbor.DevPackages.Server.Stats;
 using Arbor.DevPackages.ServiceDefaults;
 
@@ -72,6 +73,7 @@ if (feeds.Count == 0)
 // TODO: Refactor UpstreamSearchCache to be feed-aware (one cache per feed) and
 //       remove this singleton registration (Iteration 11 candidate).
 builder.Services.AddSingleton(feeds[0]);
+builder.Services.AddSingleton<IReadOnlyList<FeedConfiguration>>(feeds);
 builder.Services.AddSingleton<IFeedRouter>(new FeedRouter(feeds));
 
 // Connectivity probe and upstream proxy.
@@ -95,6 +97,7 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<UpstreamSearchCach
 var app = builder.Build();
 
 app.MapDefaultEndpoints();
+app.MapStartPage();
 
 // All NuGet v3 endpoints are scoped under /feeds/{feedId}.
 var feedsGroup = app.MapGroup("/feeds/{feedId}");
