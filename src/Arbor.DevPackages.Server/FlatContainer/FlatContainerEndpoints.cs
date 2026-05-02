@@ -40,9 +40,9 @@ public static class FlatContainerEndpoints
 
         var all = await store.ListAllAsync(cancellationToken);
         var versions = all
-            .Where(p => string.Equals(p.Id, id, StringComparison.Ordinal))
-            .Select(p => p.Version)
-            .OrderBy(v => v, SemVerComparer.Instance)
+            .Where(identity => string.Equals(identity.Id, id, StringComparison.Ordinal))
+            .Select(identity => identity.Version)
+            .OrderBy(version => version, SemVerComparer.Instance)
             .ToArray();
 
         if (versions.Length == 0)
@@ -139,8 +139,8 @@ public static class FlatContainerEndpoints
 
         var ifNoneMatch = context.Request.GetTypedHeaders().IfNoneMatch;
         if (ifNoneMatch is { Count: > 0 } &&
-            ifNoneMatch.Any(e => e.Tag.HasValue &&
-                string.Equals(e.Tag.Value, quotedEtag, StringComparison.Ordinal)))
+            ifNoneMatch.Any(entityTag => entityTag.Tag.HasValue &&
+                string.Equals(entityTag.Tag.Value, quotedEtag, StringComparison.Ordinal)))
         {
             return Results.StatusCode(304);
         }

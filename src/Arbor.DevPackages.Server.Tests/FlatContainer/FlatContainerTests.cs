@@ -48,8 +48,8 @@ public sealed class FlatContainerTests : IClassFixture<WebApplicationFactory<Pro
         var packageStore = store ?? new InMemoryPackageStore();
         var statsCollector = collector ?? new RecordingStatisticsCollector();
 
-        return _factory.WithWebHostBuilder(b =>
-            b.ConfigureServices(services =>
+        return _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
             {
                 services.AddSingleton<IPackageStore>(packageStore);
                 services.AddSingleton<IStatisticsCollector>(statsCollector);
@@ -74,11 +74,11 @@ public sealed class FlatContainerTests : IClassFixture<WebApplicationFactory<Pro
         using var factory = BuildFactory(StoreWithTestPackage());
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/feeds/default/v3/flatcontainer/serilog/index.json");
+        var response = await client.GetAsync("/feeds/default/v3/flatcontainer/serilog/index.json", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(json);
         var versions = doc.RootElement.GetProperty("versions");
 
@@ -92,7 +92,7 @@ public sealed class FlatContainerTests : IClassFixture<WebApplicationFactory<Pro
         using var factory = BuildFactory();
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/feeds/default/v3/flatcontainer/unknown-package/index.json");
+        var response = await client.GetAsync("/feeds/default/v3/flatcontainer/unknown-package/index.json", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -106,13 +106,13 @@ public sealed class FlatContainerTests : IClassFixture<WebApplicationFactory<Pro
         var client = factory.CreateClient();
 
         var response = await client.GetAsync(
-            "/feeds/default/v3/flatcontainer/serilog/3.1.1/serilog.3.1.1.nupkg");
+            "/feeds/default/v3/flatcontainer/serilog/3.1.1/serilog.3.1.1.nupkg", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         response.Content.Headers.ContentType?.MediaType.Should().Be("application/octet-stream");
         response.Headers.Contains("X-Checksum-SHA512").Should().BeTrue();
 
-        var bytes = await response.Content.ReadAsByteArrayAsync();
+        var bytes = await response.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken);
         bytes.Should().BeEquivalentTo(TestNupkg);
     }
 
@@ -123,7 +123,7 @@ public sealed class FlatContainerTests : IClassFixture<WebApplicationFactory<Pro
         var client = factory.CreateClient();
 
         var response = await client.GetAsync(
-            "/feeds/default/v3/flatcontainer/unknown/1.0.0/unknown.1.0.0.nupkg");
+            "/feeds/default/v3/flatcontainer/unknown/1.0.0/unknown.1.0.0.nupkg", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -136,7 +136,7 @@ public sealed class FlatContainerTests : IClassFixture<WebApplicationFactory<Pro
 
         // First request to get the ETag.
         var first = await client.GetAsync(
-            "/feeds/default/v3/flatcontainer/serilog/3.1.1/serilog.3.1.1.nupkg");
+            "/feeds/default/v3/flatcontainer/serilog/3.1.1/serilog.3.1.1.nupkg", TestContext.Current.CancellationToken);
         var etag = first.Headers.ETag?.Tag;
         etag.Should().NotBeNullOrEmpty();
 
@@ -145,7 +145,7 @@ public sealed class FlatContainerTests : IClassFixture<WebApplicationFactory<Pro
             HttpMethod.Get,
             "/feeds/default/v3/flatcontainer/serilog/3.1.1/serilog.3.1.1.nupkg");
         request.Headers.Add("If-None-Match", etag!);
-        var second = await client.SendAsync(request);
+        var second = await client.SendAsync(request, TestContext.Current.CancellationToken);
 
         second.StatusCode.Should().Be(HttpStatusCode.NotModified);
     }
@@ -157,7 +157,7 @@ public sealed class FlatContainerTests : IClassFixture<WebApplicationFactory<Pro
         using var factory = BuildFactory(StoreWithTestPackage(), collector);
         var client = factory.CreateClient();
 
-        await client.GetAsync("/feeds/default/v3/flatcontainer/serilog/3.1.1/serilog.3.1.1.nupkg");
+        await client.GetAsync("/feeds/default/v3/flatcontainer/serilog/3.1.1/serilog.3.1.1.nupkg", TestContext.Current.CancellationToken);
 
         collector.RecordedEvents.Should().HaveCount(1);
         var evt = collector.RecordedEvents[0];
@@ -174,12 +174,12 @@ public sealed class FlatContainerTests : IClassFixture<WebApplicationFactory<Pro
         var client = factory.CreateClient();
 
         var response = await client.GetAsync(
-            "/feeds/default/v3/flatcontainer/serilog/3.1.1/serilog.3.1.1.nuspec");
+            "/feeds/default/v3/flatcontainer/serilog/3.1.1/serilog.3.1.1.nuspec", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         response.Content.Headers.ContentType?.MediaType.Should().Be("application/xml");
 
-        var content = await response.Content.ReadAsStringAsync();
+        var content = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         content.Should().Be(TestNuspec);
     }
 
@@ -235,7 +235,7 @@ public sealed class FlatContainerTests : IClassFixture<WebApplicationFactory<Pro
             ServiceIndexEndpoints.MapServiceIndex(feedsGroup);
             FlatContainerEndpoints.MapFlatContainer(feedsGroup);
 
-            await app.StartAsync();
+            await app.StartAsync(TestContext.Current.CancellationToken);
 
             try
             {
@@ -247,29 +247,29 @@ public sealed class FlatContainerTests : IClassFixture<WebApplicationFactory<Pro
                 var repository = Repository.Factory.GetCoreV3(source);
 
                 using var cache = new SourceCacheContext { NoCache = true };
-                var resource = await repository.GetResourceAsync<FindPackageByIdResource>(CancellationToken.None);
+                var resource = await repository.GetResourceAsync<FindPackageByIdResource>(TestContext.Current.CancellationToken);
 
                 // Verify the version list endpoint.
                 var versions = await resource.GetAllVersionsAsync(
-                    "serilog", cache, NullLogger.Instance, CancellationToken.None);
+                    "serilog", cache, NullLogger.Instance, TestContext.Current.CancellationToken);
 
-                versions.Should().ContainSingle(v => v == new NuGetVersion("3.1.1"));
+                versions.Should().ContainSingle(version => version == new NuGetVersion("3.1.1"));
 
                 // Verify the nupkg download endpoint.
                 using var ms = new MemoryStream();
                 var downloaded = await resource.CopyNupkgToStreamAsync(
-                    "serilog", new NuGetVersion("3.1.1"), ms, cache, NullLogger.Instance, CancellationToken.None);
+                    "serilog", new NuGetVersion("3.1.1"), ms, cache, NullLogger.Instance, TestContext.Current.CancellationToken);
 
                 downloaded.Should().BeTrue();
                 ms.ToArray().Should().BeEquivalentTo(nupkgBytes);
 
                 // Verify that a download event was recorded.
                 collector.RecordedEvents.Should().ContainSingle(
-                    e => e.Identity.Id == "serilog" && e.Identity.Version == "3.1.1");
+                    downloadEvent => downloadEvent.Identity.Id == "serilog" && downloadEvent.Identity.Version == "3.1.1");
             }
             finally
             {
-                await app.StopAsync();
+                await app.StopAsync(TestContext.Current.CancellationToken);
             }
         }
         finally

@@ -49,7 +49,7 @@ public sealed class ServerFixture : IAsyncLifetime
 
     // ── IAsyncLifetime ────────────────────────────────────────────────────
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         Port = GetFreePort();
         BaseAddress = $"http://localhost:{Port}";
@@ -97,17 +97,17 @@ public sealed class ServerFixture : IAsyncLifetime
 
         // Drain stdout and stderr asynchronously to avoid blocking the child process when
         // the pipe buffers fill up. The captured text is included in failure diagnostics.
-        _process.OutputDataReceived += (_, e) => { if (e.Data is not null) { lock (_outputLock) _serverOutput.AppendLine(e.Data); } };
-        _process.ErrorDataReceived += (_, e) => { if (e.Data is not null) { lock (_outputLock) _serverError.AppendLine(e.Data); } };
+        _process.OutputDataReceived += (_, e) => { if (e.Data is { }) { lock (_outputLock) _serverOutput.AppendLine(e.Data); } };
+        _process.ErrorDataReceived += (_, e) => { if (e.Data is { }) { lock (_outputLock) _serverError.AppendLine(e.Data); } };
         _process.BeginOutputReadLine();
         _process.BeginErrorReadLine();
 
         await WaitForHealthyAsync();
     }
 
-    public async Task DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
-        if (_process is not null)
+        if (_process is { })
         {
             try
             {
@@ -126,7 +126,7 @@ public sealed class ServerFixture : IAsyncLifetime
             _process = null;
         }
 
-        if (_storeDirectory is not null && Directory.Exists(_storeDirectory))
+        if (_storeDirectory is { } && Directory.Exists(_storeDirectory))
         {
             try
             {
@@ -187,7 +187,7 @@ public sealed class ServerFixture : IAsyncLifetime
             // NCrunch shadow-copies the test assembly to a temp location outside the repository.
             // Fall back to the original repository root to locate testdata.
             var vcsRoot = VcsTestPathHelper.TryFindVcsRootPath();
-            if (vcsRoot is not null)
+            if (vcsRoot is { })
             {
                 testdataDir = Path.Combine(vcsRoot, "testdata", "serilog");
             }
@@ -243,7 +243,7 @@ public sealed class ServerFixture : IAsyncLifetime
         //   binDir     = two levels up  → artifacts/bin/
         var configName1 = Path.GetFileName(baseDir);
         var binDir1 = Path.GetDirectoryName(Path.GetDirectoryName(baseDir));
-        if (binDir1 is not null)
+        if (binDir1 is { })
         {
             var candidate1 = Path.Combine(binDir1, "Arbor.DevPackages.Server", configName1, exeName);
             if (File.Exists(candidate1))
@@ -258,11 +258,11 @@ public sealed class ServerFixture : IAsyncLifetime
         //   binDir     = three levels up → artifacts/bin/
         var tfmName = Path.GetFileName(baseDir);
         var configParent = Path.GetDirectoryName(baseDir);
-        if (configParent is not null)
+        if (configParent is { })
         {
             var configName2 = Path.GetFileName(configParent);
             var binDir2 = Path.GetDirectoryName(Path.GetDirectoryName(configParent));
-            if (binDir2 is not null)
+            if (binDir2 is { })
             {
                 var candidate2 = Path.Combine(binDir2, "Arbor.DevPackages.Server", configName2, tfmName, exeName);
                 if (File.Exists(candidate2))
@@ -275,7 +275,7 @@ public sealed class ServerFixture : IAsyncLifetime
         // Layout 3 (NCrunch): the test assembly is shadow-copied to a temp directory outside the
         // repository. Use the VCS root to resolve the artifacts/bin/ directory directly.
         var vcsRoot = VcsTestPathHelper.TryFindVcsRootPath();
-        if (vcsRoot is not null)
+        if (vcsRoot is { })
         {
             var artifactsBin = Path.Combine(vcsRoot, "artifacts", "bin", "Arbor.DevPackages.Server");
             foreach (var config in new[] { "release", "debug" })

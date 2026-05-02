@@ -21,8 +21,8 @@ public sealed class StatsEndpointTests : IClassFixture<WebApplicationFactory<Pro
 
     private WebApplicationFactory<Program> BuildFactory(IStatisticsReader reader)
     {
-        return _factory.WithWebHostBuilder(b =>
-            b.ConfigureServices(services =>
+        return _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
             {
                 services.AddSingleton(reader);
             }));
@@ -40,11 +40,11 @@ public sealed class StatsEndpointTests : IClassFixture<WebApplicationFactory<Pro
         using var factory = BuildFactory(new FakeStatisticsReader([summary]));
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/api/stats");
+        var response = await client.GetAsync("/api/stats", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(json);
 
         var packages = doc.RootElement.GetProperty("packages");
@@ -65,11 +65,11 @@ public sealed class StatsEndpointTests : IClassFixture<WebApplicationFactory<Pro
         using var factory = BuildFactory(new FakeStatisticsReader([]));
         var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/api/stats");
+        var response = await client.GetAsync("/api/stats", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(json);
 
         var packages = doc.RootElement.GetProperty("packages");

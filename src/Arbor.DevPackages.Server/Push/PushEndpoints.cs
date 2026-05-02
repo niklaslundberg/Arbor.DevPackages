@@ -29,7 +29,7 @@ public static class PushEndpoints
         // Restrict push to loopback connections only (no authentication is implemented).
         // Null remote IP means in-process / TestServer — allow those so tests work.
         var remoteIp = context.Connection.RemoteIpAddress;
-        if (remoteIp is not null && !IPAddress.IsLoopback(remoteIp))
+        if (remoteIp is { } && !IPAddress.IsLoopback(remoteIp))
         {
             return Results.StatusCode(StatusCodes.Status403Forbidden);
         }

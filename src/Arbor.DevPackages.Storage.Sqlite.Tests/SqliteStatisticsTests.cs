@@ -13,16 +13,16 @@ public sealed class SqliteStatisticsTests : IAsyncLifetime
     private SqliteStatisticsCollector _collector = null!;
     private SqliteStatisticsReader _reader = null!;
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         _connection = new SqliteConnection("Data Source=:memory:");
-        await _connection.OpenAsync();
-        await SqliteStatisticsSchema.ApplyAsync(_connection, CancellationToken.None);
+        await _connection.OpenAsync(TestContext.Current.CancellationToken);
+        await SqliteStatisticsSchema.ApplyAsync(_connection, TestContext.Current.CancellationToken);
         _collector = new SqliteStatisticsCollector(_connection);
         _reader = new SqliteStatisticsReader(_connection);
     }
 
-    public async Task DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         await _connection.DisposeAsync();
     }
@@ -34,9 +34,9 @@ public sealed class SqliteStatisticsTests : IAsyncLifetime
         var timestamp = new DateTimeOffset(2026, 4, 29, 10, 0, 0, TimeSpan.Zero);
         var downloadEvent = new DownloadEvent(identity, timestamp);
 
-        await _collector.RecordDownloadAsync(downloadEvent, CancellationToken.None);
+        await _collector.RecordDownloadAsync(downloadEvent, TestContext.Current.CancellationToken);
 
-        long count = await _reader.GetDownloadCountAsync(identity, CancellationToken.None);
+        long count = await _reader.GetDownloadCountAsync(identity, TestContext.Current.CancellationToken);
         count.Should().Be(1);
     }
 
@@ -47,10 +47,10 @@ public sealed class SqliteStatisticsTests : IAsyncLifetime
         var event1 = new DownloadEvent(identity, new DateTimeOffset(2026, 4, 29, 10, 0, 0, TimeSpan.Zero));
         var event2 = new DownloadEvent(identity, new DateTimeOffset(2026, 4, 29, 10, 0, 1, TimeSpan.Zero));
 
-        await _collector.RecordDownloadAsync(event1, CancellationToken.None);
-        await _collector.RecordDownloadAsync(event2, CancellationToken.None);
+        await _collector.RecordDownloadAsync(event1, TestContext.Current.CancellationToken);
+        await _collector.RecordDownloadAsync(event2, TestContext.Current.CancellationToken);
 
-        long count = await _reader.GetDownloadCountAsync(identity, CancellationToken.None);
+        long count = await _reader.GetDownloadCountAsync(identity, TestContext.Current.CancellationToken);
         count.Should().Be(2);
     }
 
@@ -61,9 +61,9 @@ public sealed class SqliteStatisticsTests : IAsyncLifetime
         var timestamp = new DateTimeOffset(2026, 4, 29, 10, 0, 0, TimeSpan.Zero);
         var downloadEvent = new DownloadEvent(identity, timestamp);
 
-        await _collector.RecordDownloadAsync(downloadEvent, CancellationToken.None);
+        await _collector.RecordDownloadAsync(downloadEvent, TestContext.Current.CancellationToken);
 
-        DateTimeOffset? result = await _reader.GetLastDownloadedAtAsync(identity, CancellationToken.None);
+        DateTimeOffset? result = await _reader.GetLastDownloadedAtAsync(identity, TestContext.Current.CancellationToken);
         result.Should().Be(timestamp);
     }
 
@@ -72,7 +72,7 @@ public sealed class SqliteStatisticsTests : IAsyncLifetime
     {
         var identity = new PackageIdentity("SomePackage.NotRecorded", "1.0.0");
 
-        DateTimeOffset? result = await _reader.GetLastDownloadedAtAsync(identity, CancellationToken.None);
+        DateTimeOffset? result = await _reader.GetLastDownloadedAtAsync(identity, TestContext.Current.CancellationToken);
 
         result.Should().BeNull();
     }
@@ -83,11 +83,11 @@ public sealed class SqliteStatisticsTests : IAsyncLifetime
         var identity = new PackageIdentity("Newtonsoft.Json", "13.0.3");
         var baseTime = new DateTimeOffset(2026, 4, 29, 10, 0, 0, TimeSpan.Zero);
 
-        await _collector.RecordDownloadAsync(new DownloadEvent(identity, baseTime), CancellationToken.None);
-        await _collector.RecordDownloadAsync(new DownloadEvent(identity, baseTime.AddSeconds(1)), CancellationToken.None);
-        await _collector.RecordDownloadAsync(new DownloadEvent(identity, baseTime.AddSeconds(2)), CancellationToken.None);
+        await _collector.RecordDownloadAsync(new DownloadEvent(identity, baseTime), TestContext.Current.CancellationToken);
+        await _collector.RecordDownloadAsync(new DownloadEvent(identity, baseTime.AddSeconds(1)), TestContext.Current.CancellationToken);
+        await _collector.RecordDownloadAsync(new DownloadEvent(identity, baseTime.AddSeconds(2)), TestContext.Current.CancellationToken);
 
-        long count = await _reader.GetDownloadCountAsync(identity, CancellationToken.None);
+        long count = await _reader.GetDownloadCountAsync(identity, TestContext.Current.CancellationToken);
         count.Should().Be(3);
     }
 
@@ -99,10 +99,10 @@ public sealed class SqliteStatisticsTests : IAsyncLifetime
         var earlier = new DateTimeOffset(2026, 4, 29, 9, 0, 0, TimeSpan.Zero);
         var later = new DateTimeOffset(2026, 4, 29, 10, 0, 0, TimeSpan.Zero);
 
-        await _collector.RecordDownloadAsync(new DownloadEvent(identity1, earlier), CancellationToken.None);
-        await _collector.RecordDownloadAsync(new DownloadEvent(identity2, later), CancellationToken.None);
+        await _collector.RecordDownloadAsync(new DownloadEvent(identity1, earlier), TestContext.Current.CancellationToken);
+        await _collector.RecordDownloadAsync(new DownloadEvent(identity2, later), TestContext.Current.CancellationToken);
 
-        DateTimeOffset? result = await _reader.GetLastDownloadedAtAcrossAllPackagesAsync(CancellationToken.None);
+        DateTimeOffset? result = await _reader.GetLastDownloadedAtAcrossAllPackagesAsync(TestContext.Current.CancellationToken);
         result.Should().Be(later);
     }
 
@@ -115,10 +115,10 @@ public sealed class SqliteStatisticsTests : IAsyncLifetime
         // 08:00+01:00 = 07:00 UTC — later UTC instant
         var laterUtc = new DateTimeOffset(2026, 4, 29, 8, 0, 0, TimeSpan.FromHours(1));
 
-        await _collector.RecordDownloadAsync(new DownloadEvent(identity, earlierUtc), CancellationToken.None);
-        await _collector.RecordDownloadAsync(new DownloadEvent(identity, laterUtc), CancellationToken.None);
+        await _collector.RecordDownloadAsync(new DownloadEvent(identity, earlierUtc), TestContext.Current.CancellationToken);
+        await _collector.RecordDownloadAsync(new DownloadEvent(identity, laterUtc), TestContext.Current.CancellationToken);
 
-        DateTimeOffset? result = await _reader.GetLastDownloadedAtAsync(identity, CancellationToken.None);
+        DateTimeOffset? result = await _reader.GetLastDownloadedAtAsync(identity, TestContext.Current.CancellationToken);
         result.Should().Be(laterUtc);
     }
 
@@ -131,19 +131,19 @@ public sealed class SqliteStatisticsTests : IAsyncLifetime
         var time2 = new DateTimeOffset(2026, 4, 29, 10, 0, 0, TimeSpan.Zero);
         var time3 = new DateTimeOffset(2026, 4, 29, 11, 0, 0, TimeSpan.Zero);
 
-        await _collector.RecordDownloadAsync(new DownloadEvent(identity1, time1), CancellationToken.None);
-        await _collector.RecordDownloadAsync(new DownloadEvent(identity1, time2), CancellationToken.None);
-        await _collector.RecordDownloadAsync(new DownloadEvent(identity2, time3), CancellationToken.None);
+        await _collector.RecordDownloadAsync(new DownloadEvent(identity1, time1), TestContext.Current.CancellationToken);
+        await _collector.RecordDownloadAsync(new DownloadEvent(identity1, time2), TestContext.Current.CancellationToken);
+        await _collector.RecordDownloadAsync(new DownloadEvent(identity2, time3), TestContext.Current.CancellationToken);
 
-        IReadOnlyList<PackageStatsSummary> stats = await _reader.GetAllPackageStatsAsync(CancellationToken.None);
+        IReadOnlyList<PackageStatsSummary> stats = await _reader.GetAllPackageStatsAsync(TestContext.Current.CancellationToken);
 
         stats.Should().HaveCount(2);
 
-        var a = stats.Single(s => s.Identity.Id == "PackageA");
+        var a = stats.Single(stat => stat.Identity.Id == "PackageA");
         a.DownloadCount.Should().Be(2);
         a.LastDownloadedAt.Should().Be(time2);
 
-        var b = stats.Single(s => s.Identity.Id == "PackageB");
+        var b = stats.Single(stat => stat.Identity.Id == "PackageB");
         b.DownloadCount.Should().Be(1);
         b.LastDownloadedAt.Should().Be(time3);
     }
@@ -151,7 +151,7 @@ public sealed class SqliteStatisticsTests : IAsyncLifetime
     [Fact]
     public async Task GetAllPackageStats_WithNoDownloads_ReturnsEmpty()
     {
-        IReadOnlyList<PackageStatsSummary> stats = await _reader.GetAllPackageStatsAsync(CancellationToken.None);
+        IReadOnlyList<PackageStatsSummary> stats = await _reader.GetAllPackageStatsAsync(TestContext.Current.CancellationToken);
 
         stats.Should().BeEmpty();
     }

@@ -24,8 +24,8 @@ internal static class RegistrationIndexBuilder
         var indexUrl = IndexUrl(baseUrl, id);
 
         var leafItems = packages
-            .OrderBy(p => p.Identity.Version, SemVerComparer.Instance)
-            .Select(p => BuildLeafItem(baseUrl, p))
+            .OrderBy(package => package.Identity.Version, SemVerComparer.Instance)
+            .Select(package => BuildLeafItem(baseUrl, package))
             .ToArray();
 
         var lower = leafItems.Length > 0 ? leafItems[0].CatalogEntry.Version : string.Empty;

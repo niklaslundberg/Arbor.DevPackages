@@ -19,7 +19,7 @@ public sealed class SqliteStatisticsDatabaseTests
     public async Task OpenAsync_WithInMemoryConnectionString_ReturnsInitializedDatabase()
     {
         await using var db = await SqliteStatisticsDatabase.OpenAsync(
-            MakeConnectionString(), CancellationToken.None);
+            MakeConnectionString(), TestContext.Current.CancellationToken);
 
         db.Should().NotBeNull();
         db.Collector.Should().NotBeNull();
@@ -30,14 +30,14 @@ public sealed class SqliteStatisticsDatabaseTests
     public async Task OpenAsync_AfterOpen_CanRecordAndReadDownloads()
     {
         await using var db = await SqliteStatisticsDatabase.OpenAsync(
-            MakeConnectionString(), CancellationToken.None);
+            MakeConnectionString(), TestContext.Current.CancellationToken);
 
         var identity = new PackageIdentity("TestPkg", "1.0.0");
         var timestamp = new DateTimeOffset(2026, 5, 1, 10, 0, 0, TimeSpan.Zero);
 
-        await db.Collector.RecordDownloadAsync(new DownloadEvent(identity, timestamp), CancellationToken.None);
+        await db.Collector.RecordDownloadAsync(new DownloadEvent(identity, timestamp), TestContext.Current.CancellationToken);
 
-        long count = await db.Reader.GetDownloadCountAsync(identity, CancellationToken.None);
+        long count = await db.Reader.GetDownloadCountAsync(identity, TestContext.Current.CancellationToken);
         count.Should().Be(1);
     }
 
@@ -45,11 +45,11 @@ public sealed class SqliteStatisticsDatabaseTests
     public async Task OpenAsync_AppliesSchemaMigration_ReadReturnsEmptyBeforeAnyDownloads()
     {
         await using var db = await SqliteStatisticsDatabase.OpenAsync(
-            MakeConnectionString(), CancellationToken.None);
+            MakeConnectionString(), TestContext.Current.CancellationToken);
 
         var identity = new PackageIdentity("NeverDownloaded", "2.0.0");
 
-        DateTimeOffset? result = await db.Reader.GetLastDownloadedAtAsync(identity, CancellationToken.None);
+        DateTimeOffset? result = await db.Reader.GetLastDownloadedAtAsync(identity, TestContext.Current.CancellationToken);
 
         result.Should().BeNull();
     }

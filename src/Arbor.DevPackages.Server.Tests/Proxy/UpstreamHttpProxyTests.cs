@@ -51,7 +51,7 @@ public sealed class UpstreamHttpProxyTests : IDisposable
         var identity = new PackageIdentity("testpkg", "1.0.0");
 
         PackageMetadata? result =
-            await proxy.FetchAndStoreAsync(identity, Feed, CancellationToken.None);
+            await proxy.FetchAndStoreAsync(identity, Feed, TestContext.Current.CancellationToken);
 
         result.Should().BeNull();
     }
@@ -77,7 +77,7 @@ public sealed class UpstreamHttpProxyTests : IDisposable
         var identity = new PackageIdentity("testpkg", "1.0.0");
 
         PackageMetadata? result =
-            await proxy.FetchAndStoreAsync(identity, Feed, CancellationToken.None);
+            await proxy.FetchAndStoreAsync(identity, Feed, TestContext.Current.CancellationToken);
 
         result.Should().NotBeNull();
         result!.Identity.Id.Should().Be("testpkg");
@@ -86,7 +86,7 @@ public sealed class UpstreamHttpProxyTests : IDisposable
         result.Sha512Hash.Should().NotBeNullOrEmpty();
 
         // Verify the package was actually persisted in the store.
-        bool exists = await _store.ExistsAsync(identity, CancellationToken.None);
+        bool exists = await _store.ExistsAsync(identity, TestContext.Current.CancellationToken);
         exists.Should().BeTrue();
     }
 
@@ -107,7 +107,7 @@ public sealed class UpstreamHttpProxyTests : IDisposable
         var proxy = BuildProxy(handler);
         var identity = new PackageIdentity("testpkg", "1.0.0");
 
-        Func<Task> act = () => proxy.FetchAndStoreAsync(identity, Feed, CancellationToken.None);
+        Func<Task> act = () => proxy.FetchAndStoreAsync(identity, Feed, TestContext.Current.CancellationToken);
 
         await act.Should().ThrowAsync<HttpRequestException>();
     }
@@ -123,7 +123,7 @@ public sealed class UpstreamHttpProxyTests : IDisposable
         var proxy = BuildProxy(handler);
         var identity = new PackageIdentity("testpkg", "1.0.0");
 
-        Func<Task> act = () => proxy.FetchAndStoreAsync(identity, Feed, CancellationToken.None);
+        Func<Task> act = () => proxy.FetchAndStoreAsync(identity, Feed, TestContext.Current.CancellationToken);
 
         await act.Should().ThrowAsync<HttpRequestException>();
     }
@@ -140,7 +140,7 @@ public sealed class UpstreamHttpProxyTests : IDisposable
         var proxy = BuildProxy(handler);
         var identity = new PackageIdentity("MyPkg", "2.3.4"); // mixed-case input
 
-        await proxy.FetchAndStoreAsync(identity, Feed, CancellationToken.None);
+        await proxy.FetchAndStoreAsync(identity, Feed, TestContext.Current.CancellationToken);
 
         // The proxy must normalise the ID and version to lower-case in the URL.
         handler.RequestedUrls.Should().Contain(
@@ -176,7 +176,7 @@ public sealed class UpstreamHttpProxyTests : IDisposable
             if (_responses.TryGetValue(url, out var entry))
             {
                 var msg = new HttpResponseMessage(entry.Status);
-                if (entry.Body is not null)
+                if (entry.Body is { })
                 {
                     msg.Content = new ByteArrayContent(entry.Body);
                 }

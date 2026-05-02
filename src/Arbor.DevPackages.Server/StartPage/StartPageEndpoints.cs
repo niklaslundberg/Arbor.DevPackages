@@ -83,7 +83,7 @@ public static class StartPageEndpoints
                 sb.AppendLine("  <p>Add this feed to your NuGet configuration:</p>");
                 sb.AppendLine($"  <pre>dotnet nuget add source \"{escapedServiceIndexUrl}\" --name \"{escapedFeedId}\"</pre>");
 
-                if (feed.UpstreamUrl is not null)
+                if (feed.UpstreamUrl is { })
                 {
                     sb.AppendLine($"  <p><strong>Upstream:</strong> <code>{WebUtility.HtmlEncode(feed.UpstreamUrl.ToString())}</code></p>");
                 }

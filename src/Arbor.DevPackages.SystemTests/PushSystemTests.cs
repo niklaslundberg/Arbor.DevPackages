@@ -34,7 +34,7 @@ public sealed class PushSystemTests
 
         try
         {
-            var pushResult = await NuGetPushRunner.RunAsync(fixture.Port, nupkgPath);
+            var pushResult = await NuGetPushRunner.RunAsync(fixture.Port, nupkgPath, cancellationToken: TestContext.Current.CancellationToken);
 
             pushResult.ExitCode.Should().Be(
                 0,
@@ -47,7 +47,7 @@ public sealed class PushSystemTests
                 $"{fixture.BaseAddress}/feeds/nuget-org/v3/flatcontainer/" +
                 $"{PushTestPackageId.ToLowerInvariant()}/index.json";
 
-            var response = await http.GetAsync(versionListUrl);
+            var response = await http.GetAsync(versionListUrl, TestContext.Current.CancellationToken);
             response.StatusCode.Should().Be(
                 HttpStatusCode.OK,
                 because: "the pushed package should appear in the flat container version list");
@@ -78,14 +78,14 @@ public sealed class PushSystemTests
         try
         {
             // First push — must succeed.
-            var firstPush = await NuGetPushRunner.RunAsync(fixture.Port, nupkgPath);
+            var firstPush = await NuGetPushRunner.RunAsync(fixture.Port, nupkgPath, cancellationToken: TestContext.Current.CancellationToken);
             firstPush.ExitCode.Should().Be(
                 0,
                 because: $"first push should succeed. stdout: {firstPush.Output} stderr: {firstPush.Error}");
 
             // Second push of the same package — must fail with a non-zero exit code
             // (the NuGet CLI maps HTTP 409 to a non-zero exit code) and emit "409" in its output.
-            var secondPush = await NuGetPushRunner.RunAsync(fixture.Port, nupkgPath);
+            var secondPush = await NuGetPushRunner.RunAsync(fixture.Port, nupkgPath, cancellationToken: TestContext.Current.CancellationToken);
             secondPush.ExitCode.Should().NotBe(
                 0,
                 because: "pushing a duplicate package should fail (HTTP 409 → non-zero exit code)");
@@ -119,7 +119,7 @@ public sealed class PushSystemTests
 
         try
         {
-            var pushResult = await NuGetPushRunner.RunAsync(fixture.Port, nupkgPath);
+            var pushResult = await NuGetPushRunner.RunAsync(fixture.Port, nupkgPath, cancellationToken: TestContext.Current.CancellationToken);
 
             // The NuGet CLI returns a non-zero exit code when the server rejects with 403.
             pushResult.ExitCode.Should().NotBe(
@@ -133,7 +133,7 @@ public sealed class PushSystemTests
             var pushEndpointUrl = $"{fixture.BaseAddress}/feeds/nuget-org/v3/push";
             using var content = new ByteArrayContent([]);
             content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
-            var httpResponse = await http.PutAsync(pushEndpointUrl, content);
+            var httpResponse = await http.PutAsync(pushEndpointUrl, content, TestContext.Current.CancellationToken);
             httpResponse.StatusCode.Should().Be(
                 HttpStatusCode.Forbidden,
                 because: "the push endpoint must return 403 Forbidden for a read-only feed");
@@ -167,7 +167,7 @@ public sealed class PushSystemTests
         try
         {
             // Push the package.
-            var pushResult = await NuGetPushRunner.RunAsync(fixture.Port, nupkgPath);
+            var pushResult = await NuGetPushRunner.RunAsync(fixture.Port, nupkgPath, cancellationToken: TestContext.Current.CancellationToken);
             pushResult.ExitCode.Should().Be(
                 0,
                 because: $"push must succeed before we can test restore. " +
@@ -175,7 +175,7 @@ public sealed class PushSystemTests
 
             // Restore using a custom runner that targets the specific package.
             var restoreResult = await NuGetRestoreRunner.RunForPackageAsync(
-                fixture.Port, roundTripId, roundTripVersion);
+                fixture.Port, roundTripId, roundTripVersion, TestContext.Current.CancellationToken);
 
             restoreResult.ExitCode.Should().Be(
                 0,

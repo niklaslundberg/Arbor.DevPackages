@@ -12,7 +12,7 @@ public sealed class FeedRouter : IFeedRouter
     {
         ArgumentNullException.ThrowIfNull(feeds);
         ValidateFeedIds(feeds);
-        _feeds = feeds.ToDictionary(f => f.FeedId, StringComparer.OrdinalIgnoreCase);
+        _feeds = feeds.ToDictionary(feed => feed.FeedId, StringComparer.OrdinalIgnoreCase);
     }
 
     public Task<FeedConfiguration?> RouteAsync(string feedId, CancellationToken cancellationToken)

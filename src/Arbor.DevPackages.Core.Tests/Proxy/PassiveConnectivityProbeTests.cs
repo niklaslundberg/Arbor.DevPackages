@@ -20,14 +20,14 @@ public sealed class PassiveConnectivityProbeTests
         var probe = new PassiveConnectivityProbe(ConnectivityProbeOptions.Default, timeProvider);
 
         // Before any failure — upstream should appear reachable.
-        bool beforeFailure = await probe.IsReachableAsync(Feed, CancellationToken.None);
+        bool beforeFailure = await probe.IsReachableAsync(Feed, TestContext.Current.CancellationToken);
         beforeFailure.Should().BeTrue();
 
         // Simulate a fetch failure.
-        await probe.RecordFailureAsync(Feed, CancellationToken.None);
+        await probe.RecordFailureAsync(Feed, TestContext.Current.CancellationToken);
 
         // Within the back-off window — upstream should be considered offline.
-        bool afterFailure = await probe.IsReachableAsync(Feed, CancellationToken.None);
+        bool afterFailure = await probe.IsReachableAsync(Feed, TestContext.Current.CancellationToken);
         afterFailure.Should().BeFalse();
     }
 
@@ -42,12 +42,12 @@ public sealed class PassiveConnectivityProbeTests
         var probe = new PassiveConnectivityProbe(options, timeProvider);
 
         // Record a failure at time T.
-        await probe.RecordFailureAsync(Feed, CancellationToken.None);
+        await probe.RecordFailureAsync(Feed, TestContext.Current.CancellationToken);
 
         // Advance time by 30 seconds — still within the 60-second back-off window.
         timeProvider.Advance(TimeSpan.FromSeconds(30));
 
-        bool reachable = await probe.IsReachableAsync(Feed, CancellationToken.None);
+        bool reachable = await probe.IsReachableAsync(Feed, TestContext.Current.CancellationToken);
         reachable.Should().BeFalse("upstream should remain offline within the back-off window");
     }
 
@@ -60,12 +60,12 @@ public sealed class PassiveConnectivityProbeTests
         var probe = new PassiveConnectivityProbe(options, timeProvider);
 
         // Record a failure.
-        await probe.RecordFailureAsync(Feed, CancellationToken.None);
+        await probe.RecordFailureAsync(Feed, TestContext.Current.CancellationToken);
 
         // Advance time past the back-off window.
         timeProvider.Advance(TimeSpan.FromSeconds(61));
 
-        bool reachable = await probe.IsReachableAsync(Feed, CancellationToken.None);
+        bool reachable = await probe.IsReachableAsync(Feed, TestContext.Current.CancellationToken);
         reachable.Should().BeTrue("upstream should be retried after the back-off window elapses");
     }
 
@@ -79,16 +79,16 @@ public sealed class PassiveConnectivityProbeTests
         var options = new ConnectivityProbeOptions { BackoffDuration = TimeSpan.FromSeconds(60) };
         var probe = new PassiveConnectivityProbe(options, timeProvider);
 
-        await probe.RecordFailureAsync(Feed, CancellationToken.None);
+        await probe.RecordFailureAsync(Feed, TestContext.Current.CancellationToken);
 
         // 30 s later: still within the back-off window regardless of offset.
         timeProvider.Advance(TimeSpan.FromSeconds(30));
-        bool withinWindow = await probe.IsReachableAsync(Feed, CancellationToken.None);
+        bool withinWindow = await probe.IsReachableAsync(Feed, TestContext.Current.CancellationToken);
         withinWindow.Should().BeFalse("should still be offline within back-off window");
 
         // 61 s after failure: back-off has elapsed.
         timeProvider.Advance(TimeSpan.FromSeconds(31));
-        bool afterExpiry = await probe.IsReachableAsync(Feed, CancellationToken.None);
+        bool afterExpiry = await probe.IsReachableAsync(Feed, TestContext.Current.CancellationToken);
         afterExpiry.Should().BeTrue("should be reachable after back-off window elapses");
     }
 
@@ -100,7 +100,7 @@ public sealed class PassiveConnectivityProbeTests
         var probe = new PassiveConnectivityProbe(ConnectivityProbeOptions.Default, TimeProvider.System);
         var localFeed = new FeedConfiguration("local", UpstreamUrl: null);
 
-        bool reachable = await probe.IsReachableAsync(localFeed, CancellationToken.None);
+        bool reachable = await probe.IsReachableAsync(localFeed, TestContext.Current.CancellationToken);
 
         reachable.Should().BeFalse("a feed with no upstream URL can never be reached");
     }
@@ -111,7 +111,7 @@ public sealed class PassiveConnectivityProbeTests
         var probe = new PassiveConnectivityProbe(ConnectivityProbeOptions.Default, TimeProvider.System);
         var localFeed = new FeedConfiguration("local", UpstreamUrl: null);
 
-        Func<Task> act = () => probe.RecordFailureAsync(localFeed, CancellationToken.None);
+        Func<Task> act = () => probe.RecordFailureAsync(localFeed, TestContext.Current.CancellationToken);
 
         await act.Should().NotThrowAsync();
     }

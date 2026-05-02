@@ -39,7 +39,7 @@ public static class SearchEndpoints
 
         if (!string.IsNullOrWhiteSpace(q))
         {
-            filtered = filtered.Where(e => MatchesQuery(e, q));
+            filtered = filtered.Where(entry => MatchesQuery(entry, q));
         }
 
         if (!effectivePrerelease)
@@ -64,14 +64,14 @@ public static class SearchEndpoints
         ContainsCaseInsensitive(entry.Tags, q);
 
     private static bool ContainsCaseInsensitive(string? value, string query) =>
-        value is not null &&
+        value is { } &&
         value.Contains(query, StringComparison.OrdinalIgnoreCase);
 
     private static bool HasStableVersion(SearchResultPackage entry)
     {
         if (entry.Versions is { Count: > 0 })
         {
-            return entry.Versions.Any(v => !IsPrerelease(v.Version));
+            return entry.Versions.Any(versionEntry => !IsPrerelease(versionEntry.Version));
         }
 
         return !IsPrerelease(entry.Version);
@@ -91,19 +91,19 @@ public static class SearchEndpoints
         }
 
         var stableVersions = entry.Versions
-            .Where(v => !IsPrerelease(v.Version))
+            .Where(versionEntry => !IsPrerelease(versionEntry.Version))
             .ToList();
 
         var latestStable = stableVersions
-            .Select(v => (v.Version, Parsed: NuGetVersion.TryParse(v.Version, out var nv) ? nv : null))
-            .Where(x => x.Parsed is not null)
-            .OrderByDescending(x => x.Parsed)
-            .Select(x => x.Version)
+            .Select(versionEntry => (versionEntry.Version, Parsed: NuGetVersion.TryParse(versionEntry.Version, out var parsedVersion) ? parsedVersion : null))
+            .Where(parsedEntry => parsedEntry.Parsed is { })
+            .OrderByDescending(parsedEntry => parsedEntry.Parsed)
+            .Select(parsedEntry => parsedEntry.Version)
             .FirstOrDefault() ?? stableVersions[0].Version;
 
         return entry with { Version = latestStable, Versions = stableVersions };
     }
 
     private static bool IsPrerelease(string version) =>
-        NuGetVersion.TryParse(version, out var v) && v.IsPrerelease;
+        NuGetVersion.TryParse(version, out var nugetVersion) && nugetVersion.IsPrerelease;
 }
