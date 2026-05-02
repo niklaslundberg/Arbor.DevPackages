@@ -5,11 +5,17 @@ using Arbor.DevPackages.Core.Feeds;
 using Arbor.DevPackages.Core.Packages;
 using Arbor.DevPackages.Core.Statistics;
 using Arbor.DevPackages.Server.Push;
+using Arbor.DevPackages.Server.ServiceIndex;
 using Arbor.DevPackages.Testing;
 using AwesomeAssertions;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using NuGet.Common;
+using NuGet.Configuration;
+using NuGet.Protocol;
+using NuGet.Protocol.Core.Types;
 using Xunit;
 
 namespace Arbor.DevPackages.Server.Tests.Push;
@@ -149,8 +155,6 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
         using var factory = BuildFactory(allowPush: true, allowPrerelease: false);
         var client = factory.CreateClient();
 
-        var nupkgBytes = CreateNupkgBytes(TestPrereleaseNuspec);
-        // Create a proper nupkg with prerelease nuspec
         using var ms = new MemoryStream();
         using (var archive = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
         {
@@ -234,6 +238,108 @@ public sealed class PushEndpointsTests : IClassFixture<WebApplicationFactory<Pro
         var response = await client.PutAsync("/feeds/default/v3/push", content);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    // ─── PushPackage_NuGetProtocolClient_CanPushPackage ───────────────────────
+
+    [Fact]
+    public async Task PushPackage_NuGetProtocolClient_CanPushPackage()
+    {
+        // NuGet.Protocol's PackageUpdateResource works with file paths,
+        // so we create a temporary nupkg file on disk.
+        var store = new InMemoryPackageStore();
+        const string pushNuspec =
+            """
+            <?xml version="1.0" encoding="utf-8"?>
+            <package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+              <metadata>
+                <id>PushProtocolTest</id>
+                <version>2.0.0</version>
+                <authors>Test</authors>
+                <description>Test package</description>
+              </metadata>
+            </package>
+            """;
+
+        // Build a minimal valid nupkg zip containing the nuspec.
+        var nupkgBytes = CreateNupkgBytesWithNuspec("pushprotocoltest.2.0.0.nuspec", pushNuspec);
+
+        // Write to a temp file so PackageUpdateResource can read it.
+        var tmpNupkg = Path.Combine(Path.GetTempPath(), $"pushprotocoltest.2.0.0.{Guid.NewGuid():N}.nupkg");
+        await File.WriteAllBytesAsync(tmpNupkg, nupkgBytes);
+
+        try
+        {
+            // Start a real Kestrel server so NuGet.Protocol uses its own HTTP stack.
+            // Push must come from loopback, so bind to 127.0.0.1.
+            var builder = WebApplication.CreateBuilder();
+            builder.WebHost.UseUrls("http://127.0.0.1:0");
+            Arbor.DevPackages.ServiceDefaults.Extensions.AddServiceDefaults(builder);
+            builder.Services.AddSingleton<IPackageStore>(store);
+            builder.Services.AddSingleton<IStatisticsCollector>(new RecordingStatisticsCollector());
+            builder.Services.AddSingleton<IFeedRouter>(
+                new FeedRouter(
+                    [new FeedConfiguration("local", AllowPush: true)]));
+
+            await using var app = builder.Build();
+            Arbor.DevPackages.ServiceDefaults.Extensions.MapDefaultEndpoints(app);
+            var feedsGroup = app.MapGroup("/feeds/{feedId}");
+            ServiceIndexEndpoints.MapServiceIndex(feedsGroup);
+            PushEndpoints.MapPush(feedsGroup);
+
+            await app.StartAsync();
+
+            try
+            {
+                var indexUrl = app.Urls.FirstOrDefault() is { } url
+                    ? $"{url}/feeds/local/v3/index.json"
+                    : throw new InvalidOperationException("The test server did not bind to any address.");
+
+                var source = new PackageSource(indexUrl);
+                var repository = Repository.Factory.GetCoreV3(source);
+
+                var pushResource = await repository.GetResourceAsync<PackageUpdateResource>(CancellationToken.None);
+
+                await pushResource.Push(
+                    packagePaths: [tmpNupkg],
+                    symbolSource: null,
+                    timeoutInSecond: 30,
+                    disableBuffering: false,
+                    getApiKey: _ => null,
+                    getSymbolApiKey: _ => null,
+                    noServiceEndpoint: false,
+                    skipDuplicate: false,
+                    symbolPackageUpdateResource: null,
+                    allowInsecureConnections: true,
+                    log: NullLogger.Instance);
+
+                // Verify the package was stored.
+                var identity = new PackageIdentity("pushprotocoltest", "2.0.0");
+                var stored = await store.ExistsAsync(identity, CancellationToken.None);
+                stored.Should().BeTrue(because: "PackageUpdateResource.Push should have stored the package");
+            }
+            finally
+            {
+                await app.StopAsync();
+            }
+        }
+        finally
+        {
+            File.Delete(tmpNupkg);
+        }
+    }
+
+    private static byte[] CreateNupkgBytesWithNuspec(string entryName, string nuspecContent)
+    {
+        using var ms = new MemoryStream();
+        using (var archive = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var entry = archive.CreateEntry(entryName);
+            using var writer = new StreamWriter(entry.Open(), Encoding.UTF8);
+            writer.Write(nuspecContent);
+        }
+
+        return ms.ToArray();
     }
 }
 

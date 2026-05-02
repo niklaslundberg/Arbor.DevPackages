@@ -1,5 +1,7 @@
 using System.IO.Compression;
+using System.Net;
 using System.Text;
+using System.Xml;
 using System.Xml.Linq;
 using Arbor.DevPackages.Core.Feeds;
 using Arbor.DevPackages.Core.Packages;
@@ -25,6 +27,14 @@ public static class PushEndpoints
         HttpContext context,
         CancellationToken cancellationToken)
     {
+        // Restrict push to loopback connections only (no authentication is implemented).
+        // Null remote IP means in-process / TestServer — allow those so tests work.
+        var remoteIp = context.Connection.RemoteIpAddress;
+        if (remoteIp is not null && !IPAddress.IsLoopback(remoteIp))
+        {
+            return Results.StatusCode(StatusCodes.Status403Forbidden);
+        }
+
         var feed = await feedRouter.RouteAsync(feedId, cancellationToken);
         if (feed is null)
         {
@@ -89,10 +99,14 @@ public static class PushEndpoints
             return Results.BadRequest(ex.Message);
         }
 
+        // Reject the package if the version cannot be parsed as a valid NuGet version.
+        if (!NuGetVersion.TryParse(identity.Version, out var nugetVersion))
+        {
+            return Results.BadRequest($"The version '{identity.Version}' is not a valid NuGet version.");
+        }
+
         // Reject pre-release packages if the feed does not allow them.
-        if (NuGetVersion.TryParse(identity.Version, out var nugetVersion) &&
-            nugetVersion.IsPrerelease &&
-            !feed.AllowPrerelease)
+        if (nugetVersion.IsPrerelease && !feed.AllowPrerelease)
         {
             return Results.StatusCode(StatusCodes.Status422UnprocessableEntity);
         }
@@ -110,14 +124,14 @@ public static class PushEndpoints
         };
     }
 
-    public static PackageIdentity ExtractPackageIdentity(string nuspecContent)
+    internal static PackageIdentity ExtractPackageIdentity(string nuspecContent)
     {
         XDocument doc;
         try
         {
             doc = XDocument.Parse(nuspecContent);
         }
-        catch (Exception ex)
+        catch (XmlException ex)
         {
             throw new FormatException("The .nuspec file is not valid XML.", ex);
         }
