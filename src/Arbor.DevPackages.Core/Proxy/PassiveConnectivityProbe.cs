@@ -27,6 +27,11 @@ public sealed class PassiveConnectivityProbe : IConnectivityProbe
     {
         ArgumentNullException.ThrowIfNull(feed);
 
+        if (feed.UpstreamUrl is null)
+        {
+            return Task.FromResult(false);
+        }
+
         string key = feed.UpstreamUrl.AbsoluteUri;
         if (_lastFailedAt.TryGetValue(key, out DateTimeOffset failedAt))
         {
@@ -44,6 +49,11 @@ public sealed class PassiveConnectivityProbe : IConnectivityProbe
     public Task RecordFailureAsync(FeedConfiguration feed, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(feed);
+
+        if (feed.UpstreamUrl is null)
+        {
+            return Task.CompletedTask;
+        }
 
         string key = feed.UpstreamUrl.AbsoluteUri;
         _lastFailedAt[key] = _timeProvider.GetUtcNow();

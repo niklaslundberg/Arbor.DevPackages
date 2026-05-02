@@ -4,6 +4,7 @@ using Arbor.DevPackages.Core.Proxy;
 using Arbor.DevPackages.Core.Statistics;
 using Arbor.DevPackages.Server.FlatContainer;
 using Arbor.DevPackages.Server.Proxy;
+using Arbor.DevPackages.Server.Push;
 using Arbor.DevPackages.Server.Registration;
 using Arbor.DevPackages.Server.Search;
 using Arbor.DevPackages.Server.ServiceIndex;
@@ -34,11 +35,13 @@ if (feedsSection.Exists())
     foreach (var section in feedsSection.GetChildren())
     {
         var id = section["Id"] ?? throw new InvalidOperationException("Each feed entry requires an 'Id'.");
-        var url = section["UpstreamUrl"] ?? throw new InvalidOperationException($"Feed '{id}' requires an 'UpstreamUrl'.");
+        var urlString = section["UpstreamUrl"];
+        var upstreamUrl = urlString is not null ? new Uri(urlString) : null;
         var allowPrerelease = section.GetValue<bool>("AllowPrerelease");
+        var allowPush = section.GetValue<bool>("AllowPush");
         var searchUrlString = section["SearchUrl"];
         var searchUrl = searchUrlString is not null ? new Uri(searchUrlString) : null;
-        feeds.Add(new FeedConfiguration(id, new Uri(url), AllowPrerelease: allowPrerelease, SearchUrl: searchUrl));
+        feeds.Add(new FeedConfiguration(id, upstreamUrl, AllowPrerelease: allowPrerelease, AllowPush: allowPush, SearchUrl: searchUrl));
     }
 }
 
@@ -89,6 +92,7 @@ feedsGroup.MapServiceIndex();
 feedsGroup.MapFlatContainer();
 feedsGroup.MapRegistration();
 feedsGroup.MapSearch();
+feedsGroup.MapPush();
 
 // Admin endpoints (not under /feeds/{feedId}).
 app.MapSearchCache();

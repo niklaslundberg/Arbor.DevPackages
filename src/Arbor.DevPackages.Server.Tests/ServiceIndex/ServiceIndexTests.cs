@@ -134,4 +134,64 @@ public sealed class ServiceIndexTests : IClassFixture<WebApplicationFactory<Prog
 
         await app.StopAsync();
     }
+
+    [Fact]
+    public async Task GetServiceIndex_PushEnabledFeed_IncludesPackagePublishResource()
+    {
+        using var factory = _factory.WithWebHostBuilder(b =>
+            b.ConfigureServices(services =>
+            {
+                services.AddSingleton<IFeedRouter>(
+                    new FeedRouter(
+                        [new FeedConfiguration("local", AllowPush: true)]));
+            }));
+
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/feeds/local/v3/index.json");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+        var resources = doc.RootElement.GetProperty("resources");
+
+        bool hasPublishResource = false;
+        foreach (var resource in resources.EnumerateArray())
+        {
+            if (resource.GetProperty("@type").GetString() == "PackagePublish/2.0.0")
+            {
+                hasPublishResource = true;
+                var id = resource.GetProperty("@id").GetString();
+                id.Should().Contain("/feeds/local/v3/push");
+                break;
+            }
+        }
+
+        hasPublishResource.Should().BeTrue(because: "a push-enabled feed must advertise PackagePublish/2.0.0");
+    }
+
+    [Fact]
+    public async Task GetServiceIndex_ProxyFeed_DoesNotIncludePackagePublishResource()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/feeds/default/v3/index.json");
+
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+        var resources = doc.RootElement.GetProperty("resources");
+
+        bool hasPublishResource = false;
+        foreach (var resource in resources.EnumerateArray())
+        {
+            if (resource.GetProperty("@type").GetString() == "PackagePublish/2.0.0")
+            {
+                hasPublishResource = true;
+                break;
+            }
+        }
+
+        hasPublishResource.Should().BeFalse(because: "a proxy feed must not advertise push");
+    }
 }

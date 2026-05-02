@@ -105,6 +105,13 @@ Arbor.DevPackages uses the following third-party packages. Each package retains 
 - **Project:** https://github.com/microsoft/vstest
 - **Used in:** `*.Tests` projects
 
+### NuGet.Packaging
+
+- **Version:** 7.3.1
+- **License:** Apache 2.0
+- **Project:** https://github.com/NuGet/NuGet.Client
+- **Used in:** `Arbor.DevPackages.Server` (reads package identity from .nupkg via `PackageArchiveReader`)
+
 ### NuGet.Protocol
 
 - **Version:** 7.3.1

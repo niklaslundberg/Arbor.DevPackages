@@ -78,12 +78,36 @@ public sealed class InMemoryPackageStore : IPackageStore
         return Task.FromResult<Stream?>(null);
     }
 
-    public Task<PackageStoreResult> StoreAsync(
+    public async Task<PackageStoreResult> StoreAsync(
         PackageIdentity identity,
         Stream nupkg,
         Stream nuspec,
-        CancellationToken cancellationToken) =>
-        throw new NotSupportedException("InMemoryPackageStore does not support StoreAsync; use Add() instead.");
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(identity);
+        ArgumentNullException.ThrowIfNull(nupkg);
+        ArgumentNullException.ThrowIfNull(nuspec);
+
+        var key = Normalise(identity);
+
+        if (_packages.ContainsKey(key))
+        {
+            return PackageStoreResult.AlreadyExists;
+        }
+
+        using var nupkgMs = new MemoryStream();
+        await nupkg.CopyToAsync(nupkgMs, cancellationToken);
+        byte[] nupkgBytes = nupkgMs.ToArray();
+
+        using var nuspecMs = new MemoryStream();
+        await nuspec.CopyToAsync(nuspecMs, cancellationToken);
+        string nuspecContent = System.Text.Encoding.UTF8.GetString(nuspecMs.ToArray());
+
+        string sha512 = ComputeSha512(nupkgBytes);
+        _packages[key] = new StoredPackage(nupkgBytes, nuspecContent, sha512);
+
+        return PackageStoreResult.Stored;
+    }
 
     public Task<bool> ExistsAsync(PackageIdentity identity, CancellationToken cancellationToken)
     {
