@@ -16,8 +16,8 @@ public sealed record SearchResultPackage(
     [property: JsonPropertyName("iconUrl")] string? IconUrl,
     [property: JsonPropertyName("licenseUrl")] string? LicenseUrl,
     [property: JsonPropertyName("projectUrl")] string? ProjectUrl,
-    [property: JsonPropertyName("tags")] IReadOnlyList<string>? Tags,
-    [property: JsonPropertyName("authors")] IReadOnlyList<string>? Authors,
+    [property: JsonPropertyName("tags")] string? Tags,
+    [property: JsonPropertyName("authors")] string? Authors,
     [property: JsonPropertyName("totalDownloads")] long TotalDownloads,
     [property: JsonPropertyName("verified")] bool Verified,
     [property: JsonPropertyName("versions")] IReadOnlyList<SearchVersionEntry>? Versions);

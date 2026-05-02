@@ -1,9 +1,17 @@
 using System.Net;
 using System.Text.Json;
 using Arbor.DevPackages.Server.Search;
+using Arbor.DevPackages.Server.ServiceIndex;
+using Arbor.DevPackages.ServiceDefaults;
 using AwesomeAssertions;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using NuGet.Common;
+using NuGet.Configuration;
+using NuGet.Protocol;
+using NuGet.Protocol.Core.Types;
 using Xunit;
 
 namespace Arbor.DevPackages.Server.Tests.Search;
@@ -205,5 +213,58 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
             "/api/feeds/default/search-cache/refresh", content: null);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    // ─── NuGet.Protocol end-to-end ───────────────────────────────────────────
+
+    [Fact]
+    public async Task Search_NuGetProtocolClient_CanSearchPackages()
+    {
+        var entries = new SearchResultPackage[]
+        {
+            BuildPackage("Serilog", "3.1.1", "Simple .NET logging"),
+            BuildPackage("Newtonsoft.Json", "13.0.3", "Popular JSON framework")
+        };
+
+        // Start a real Kestrel listener so NuGet.Protocol uses its own HTTP stack.
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseUrls("http://127.0.0.1:0");
+        Extensions.AddServiceDefaults(builder);
+        builder.Services.AddSingleton<IUpstreamSearchCache>(new FakeUpstreamSearchCache(entries));
+
+        await using var app = builder.Build();
+        Extensions.MapDefaultEndpoints(app);
+        ServiceIndexEndpoints.MapServiceIndex(app);
+        SearchEndpoints.MapSearch(app);
+
+        await app.StartAsync();
+
+        try
+        {
+            var indexUrl = app.Urls.FirstOrDefault() is { } url
+                ? $"{url}/v3/index.json"
+                : throw new InvalidOperationException("The test server did not bind to any address.");
+
+            var source = new PackageSource(indexUrl);
+            var repository = Repository.Factory.GetCoreV3(source);
+
+            var resource = await repository.GetResourceAsync<PackageSearchResource>(CancellationToken.None);
+
+            var results = await resource.SearchAsync(
+                "Serilog",
+                new SearchFilter(includePrerelease: false),
+                skip: 0,
+                take: 10,
+                NullLogger.Instance,
+                CancellationToken.None);
+
+            var packages = results.ToList();
+            packages.Should().ContainSingle(p =>
+                p.Identity.Id.Equals("Serilog", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            await app.StopAsync();
+        }
     }
 }

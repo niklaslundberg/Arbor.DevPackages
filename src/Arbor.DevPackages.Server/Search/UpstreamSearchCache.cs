@@ -75,7 +75,14 @@ public sealed class UpstreamSearchCache : BackgroundService, IUpstreamSearchCach
             return;
         }
 
-        await RefreshAsync(stoppingToken);
+        try
+        {
+            await RefreshAsync(stoppingToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
 
         using var timer = new PeriodicTimer(RefreshInterval);
         try

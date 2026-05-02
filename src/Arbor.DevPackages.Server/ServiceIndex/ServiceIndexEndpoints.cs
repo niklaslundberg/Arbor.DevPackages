@@ -27,7 +27,11 @@ public static class ServiceIndexEndpoints
                     new ServiceIndexEntry(
                         Id: $"{baseUrl}/v3/search",
                         Type: "SearchQueryService/3.5.0",
-                        Comment: "Query endpoint of NuGet Search service")
+                        Comment: "Query endpoint of NuGet Search service"),
+                    new ServiceIndexEntry(
+                        Id: $"{baseUrl}/v3/search",
+                        Type: "SearchQueryService/3.0.0-beta",
+                        Comment: "Query endpoint of NuGet Search service (legacy type alias)")
                 ]);
 
             return Results.Json(index, contentType: "application/json");

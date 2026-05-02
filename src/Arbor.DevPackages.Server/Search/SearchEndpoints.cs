@@ -30,7 +30,9 @@ public static class SearchEndpoints
 
         if (!prerelease)
         {
-            filtered = filtered.Where(HasStableVersion);
+            filtered = filtered
+                .Where(HasStableVersion)
+                .Select(ProjectToStableOnly);
         }
 
         var filteredList = filtered.ToList();
@@ -45,7 +47,7 @@ public static class SearchEndpoints
         ContainsCaseInsensitive(entry.Id, q) ||
         ContainsCaseInsensitive(entry.Description, q) ||
         ContainsCaseInsensitive(entry.Title, q) ||
-        (entry.Tags?.Any(t => ContainsCaseInsensitive(t, q)) ?? false);
+        ContainsCaseInsensitive(entry.Tags, q);
 
     private static bool ContainsCaseInsensitive(string? value, string query) =>
         value is not null &&
@@ -59,6 +61,33 @@ public static class SearchEndpoints
         }
 
         return !IsPrerelease(entry.Version);
+    }
+
+    /// <summary>
+    /// Projects an entry to contain only stable versions and sets the top-level
+    /// <see cref="SearchResultPackage.Version"/> to the latest stable version.
+    /// Call only after <see cref="HasStableVersion"/> returns true.
+    /// </summary>
+    private static SearchResultPackage ProjectToStableOnly(SearchResultPackage entry)
+    {
+        if (entry.Versions is not { Count: > 0 })
+        {
+            // Top-level version only; HasStableVersion already confirmed it is stable.
+            return entry;
+        }
+
+        var stableVersions = entry.Versions
+            .Where(v => !IsPrerelease(v.Version))
+            .ToList();
+
+        var latestStable = stableVersions
+            .Select(v => (v.Version, Parsed: NuGetVersion.TryParse(v.Version, out var nv) ? nv : null))
+            .Where(x => x.Parsed is not null)
+            .OrderByDescending(x => x.Parsed)
+            .Select(x => x.Version)
+            .FirstOrDefault() ?? stableVersions[0].Version;
+
+        return entry with { Version = latestStable, Versions = stableVersions };
     }
 
     private static bool IsPrerelease(string version) =>
