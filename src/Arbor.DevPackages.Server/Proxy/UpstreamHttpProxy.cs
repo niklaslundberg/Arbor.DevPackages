@@ -40,8 +40,10 @@ public sealed class UpstreamHttpProxy : IUpstreamProxy
 
         using HttpClient client = _httpClientFactory.CreateClient();
 
-        using HttpResponseMessage nupkgResponse =
-            await client.GetAsync(nupkgUrl, cancellationToken);
+        // ResponseHeadersRead avoids buffering the whole body into memory;
+        // the response stream is read in a single pass by StoreAsync.
+        using HttpResponseMessage nupkgResponse = await client.GetAsync(
+            nupkgUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
         if (nupkgResponse.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
@@ -50,8 +52,8 @@ public sealed class UpstreamHttpProxy : IUpstreamProxy
 
         nupkgResponse.EnsureSuccessStatusCode();
 
-        using HttpResponseMessage nuspecResponse =
-            await client.GetAsync(nuspecUrl, cancellationToken);
+        using HttpResponseMessage nuspecResponse = await client.GetAsync(
+            nuspecUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
         if (nuspecResponse.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
@@ -68,6 +70,8 @@ public sealed class UpstreamHttpProxy : IUpstreamProxy
             await nuspecResponse.Content.ReadAsStreamAsync(cancellationToken);
 
         // StoreAsync handles non-seekable (HTTP response) streams via single-pass copy+hash.
+        // AlreadyExists means a concurrent request won the race to cache this package — that is
+        // fine; we still proceed to GetMetadataAsync to return the package metadata.
         await _packageStore.StoreAsync(identity, nupkgStream, nuspecStream, cancellationToken);
 
         return await _packageStore.GetMetadataAsync(identity, cancellationToken);

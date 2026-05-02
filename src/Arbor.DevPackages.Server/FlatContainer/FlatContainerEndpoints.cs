@@ -87,9 +87,12 @@ public static class FlatContainerEndpoints
             {
                 fetched = await upstreamProxy.FetchAndStoreAsync(identity, feed, cancellationToken);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (HttpRequestException)
             {
-                // Step 5: Fetch failed — mark upstream offline and return 502.
+                // Step 5: Upstream HTTP error — mark upstream offline and return 502.
+                // Only HttpRequestException is caught here; local storage errors (IOException,
+                // PackageIntegrityException) propagate and result in a 500 response so that
+                // disk problems are not misattributed to the upstream.
                 await probe.RecordFailureAsync(feed, cancellationToken);
                 return Results.StatusCode(StatusCodes.Status502BadGateway);
             }

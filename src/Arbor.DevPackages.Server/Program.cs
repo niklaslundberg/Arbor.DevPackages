@@ -27,7 +27,11 @@ var upstreamFeedUrl = builder.Configuration["UpstreamFeedUrl"]
 builder.Services.AddSingleton(new FeedConfiguration("default", new Uri(upstreamFeedUrl)));
 
 // Connectivity probe and upstream proxy.
-builder.Services.AddSingleton(ConnectivityProbeOptions.Default);
+var backoffSeconds = builder.Configuration.GetValue<double>("ConnectivityProbe:BackoffSeconds");
+var probeOptions = backoffSeconds > 0
+    ? new ConnectivityProbeOptions { BackoffDuration = TimeSpan.FromSeconds(backoffSeconds) }
+    : ConnectivityProbeOptions.Default;
+builder.Services.AddSingleton(probeOptions);
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddSingleton<IConnectivityProbe, PassiveConnectivityProbe>();
 builder.Services.AddSingleton<IUpstreamCredentialProvider, NoOpCredentialProvider>();

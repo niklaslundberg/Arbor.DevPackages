@@ -10,10 +10,10 @@ public sealed class PassiveConnectivityProbeTests
     private static readonly FeedConfiguration Feed =
         new("test", new Uri("https://upstream.example.com/v3/flatcontainer"));
 
-    // ─── ProbeUpstream_WhenFetchFails_MarksUpstreamOffline ───────────────────
+    // ─── RecordFailureAsync + IsReachableAsync ────────────────────────────────
 
     [Fact]
-    public async Task ProbeUpstream_WhenFetchFails_MarksUpstreamOffline()
+    public async Task RecordFailureAsync_WhenCalled_IsReachableAsyncReturnsFalse()
     {
         var now = new DateTimeOffset(2026, 5, 1, 12, 0, 0, TimeSpan.Zero);
         var timeProvider = new ManualTimeProvider(now);
@@ -31,10 +31,10 @@ public sealed class PassiveConnectivityProbeTests
         afterFailure.Should().BeFalse();
     }
 
-    // ─── ProbeUpstream_WhenOffline_ReturnsOfflineStatus ─────────────────────
+    // ─── IsReachableAsync ─────────────────────────────────────────────────────
 
     [Fact]
-    public async Task ProbeUpstream_WhenOffline_ReturnsOfflineStatus()
+    public async Task IsReachableAsync_WhenWithinBackoffWindow_ReturnsFalse()
     {
         var now = new DateTimeOffset(2026, 5, 1, 12, 0, 0, TimeSpan.Zero);
         var timeProvider = new ManualTimeProvider(now);
@@ -51,10 +51,8 @@ public sealed class PassiveConnectivityProbeTests
         reachable.Should().BeFalse("upstream should remain offline within the back-off window");
     }
 
-    // ─── ProbeUpstream_AfterBackoffExpiry_AllowsRetry ────────────────────────
-
     [Fact]
-    public async Task ProbeUpstream_AfterBackoffExpiry_AllowsRetry()
+    public async Task IsReachableAsync_AfterBackoffExpiry_ReturnsTrue()
     {
         var now = new DateTimeOffset(2026, 5, 1, 12, 0, 0, TimeSpan.Zero);
         var timeProvider = new ManualTimeProvider(now);
@@ -69,6 +67,29 @@ public sealed class PassiveConnectivityProbeTests
 
         bool reachable = await probe.IsReachableAsync(Feed, CancellationToken.None);
         reachable.Should().BeTrue("upstream should be retried after the back-off window elapses");
+    }
+
+    [Fact]
+    public async Task IsReachableAsync_WithNonUtcOffset_RespectsBackoffWindow()
+    {
+        // Failure recorded at a non-UTC offset (+02:00); the back-off comparison must
+        // be offset-aware and not depend on the local offset being UTC.
+        var now = new DateTimeOffset(2026, 5, 1, 14, 0, 0, TimeSpan.FromHours(2)); // 12:00 UTC
+        var timeProvider = new ManualTimeProvider(now);
+        var options = new ConnectivityProbeOptions { BackoffDuration = TimeSpan.FromSeconds(60) };
+        var probe = new PassiveConnectivityProbe(options, timeProvider);
+
+        await probe.RecordFailureAsync(Feed, CancellationToken.None);
+
+        // 30 s later: still within the back-off window regardless of offset.
+        timeProvider.Advance(TimeSpan.FromSeconds(30));
+        bool withinWindow = await probe.IsReachableAsync(Feed, CancellationToken.None);
+        withinWindow.Should().BeFalse("should still be offline within back-off window");
+
+        // 61 s after failure: back-off has elapsed.
+        timeProvider.Advance(TimeSpan.FromSeconds(31));
+        bool afterExpiry = await probe.IsReachableAsync(Feed, CancellationToken.None);
+        afterExpiry.Should().BeTrue("should be reachable after back-off window elapses");
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────────
