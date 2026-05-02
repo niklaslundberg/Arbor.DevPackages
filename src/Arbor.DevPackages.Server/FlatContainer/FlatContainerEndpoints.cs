@@ -80,6 +80,12 @@ public static class FlatContainerEndpoints
 
         if (storedHash is null)
         {
+            // Local-only feeds (no upstream URL) cannot proxy — return 404 on cache miss.
+            if (feed.UpstreamUrl is null)
+            {
+                return Results.NotFound();
+            }
+
             // Resolve optional proxy services from DI (null if not configured).
             var probe = context.RequestServices.GetService<IConnectivityProbe>();
             var upstreamProxy = context.RequestServices.GetService<IUpstreamProxy>();

@@ -31,6 +31,11 @@ public sealed class UpstreamHttpProxy : IUpstreamProxy
         ArgumentNullException.ThrowIfNull(identity);
         ArgumentNullException.ThrowIfNull(feed);
 
+        if (feed.UpstreamUrl is null)
+        {
+            return null;
+        }
+
         string id = identity.Id.ToLowerInvariant();
         string version = identity.Version.ToLowerInvariant();
 
