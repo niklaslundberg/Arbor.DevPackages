@@ -215,7 +215,9 @@ public sealed class FlatContainerTests : IClassFixture<WebApplicationFactory<Pro
         var collector = new RecordingStatisticsCollector();
 
         // Start a real Kestrel server so NuGet.Protocol uses its own HTTP stack.
-        var builder = WebApplication.CreateBuilder();
+        // ContentRootPath is set to a directory without appsettings.json so the
+        // Server project's Kestrel endpoint config does not override UseUrls.
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { ContentRootPath = Path.GetTempPath() });
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         Arbor.DevPackages.ServiceDefaults.Extensions.AddServiceDefaults(builder);
         builder.Services.AddSingleton<IPackageStore>(store);

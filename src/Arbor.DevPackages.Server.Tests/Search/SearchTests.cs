@@ -317,7 +317,9 @@ public sealed class SearchTests : IClassFixture<WebApplicationFactory<Program>>
         };
 
         // Start a real Kestrel listener so NuGet.Protocol uses its own HTTP stack.
-        var builder = WebApplication.CreateBuilder();
+        // ContentRootPath is set to a directory without appsettings.json so the
+        // Server project's Kestrel endpoint config does not override UseUrls.
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { ContentRootPath = Path.GetTempPath() });
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         Extensions.AddServiceDefaults(builder);
         builder.Services.AddSingleton<IUpstreamSearchCache>(new FakeUpstreamSearchCache(entries));
