@@ -47,4 +47,25 @@ public class RecordValueTests
         decision.Action.Should().Be(RetentionAction.Purge);
         decision.Reason.Should().Be("package is stale");
     }
+
+    [Fact]
+    public void PackageStatsSummary_WithValues_ExposesProperties()
+    {
+        var identity = new PackageIdentity("Serilog", "3.1.1");
+        var lastDownloadedAt = new DateTimeOffset(2026, 5, 1, 10, 0, 0, TimeSpan.Zero);
+        var summary = new PackageStatsSummary(identity, DownloadCount: 42, LastDownloadedAt: lastDownloadedAt);
+
+        summary.Identity.Should().Be(identity);
+        summary.DownloadCount.Should().Be(42);
+        summary.LastDownloadedAt.Should().Be(lastDownloadedAt);
+    }
+
+    [Fact]
+    public void PackageStatsSummary_WithNullLastDownloadedAt_ExposesNullProperty()
+    {
+        var identity = new PackageIdentity("Serilog", "3.1.1");
+        var summary = new PackageStatsSummary(identity, DownloadCount: 0, LastDownloadedAt: null);
+
+        summary.LastDownloadedAt.Should().BeNull();
+    }
 }
