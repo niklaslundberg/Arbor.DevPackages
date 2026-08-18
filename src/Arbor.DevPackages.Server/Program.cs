@@ -12,8 +12,29 @@ using Arbor.DevPackages.Server.ServiceIndex;
 using Arbor.DevPackages.Server.StartPage;
 using Arbor.DevPackages.Server.Stats;
 using Arbor.DevPackages.ServiceDefaults;
+using Microsoft.Extensions.Hosting.WindowsServices;
 
-var builder = WebApplication.CreateBuilder(args);
+// The Windows Service Control Manager starts services with the working directory set to
+// %SystemRoot%\System32, so the content root must be pinned to the published exe's directory
+// when running as a Windows Service; otherwise appsettings.json would not be found.
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = WindowsServiceHelpers.IsWindowsService() ? AppContext.BaseDirectory : null
+});
+
+// Both calls are context-aware no-ops unless the process is actually running as a Windows
+// Service or under systemd (detected via WindowsServiceHelpers/SystemdHelpers), so it is safe
+// to call them unconditionally for every hosting environment, including tests.
+// The name must match the name the service was registered under (see
+// scripts/install-windows-service.ps1 -ServiceName), since the SCM dispatches control
+// requests by that name; it is configurable here for the same reason.
+var windowsServiceName = builder.Configuration["WindowsService:ServiceName"] ?? "Arbor.DevPackages";
+builder.Host.UseWindowsService(options => options.ServiceName = windowsServiceName);
+builder.Host.UseSystemd();
+
+// Give in-flight requests time to complete before the service/process stops.
+builder.Services.Configure<HostOptions>(options => options.ShutdownTimeout = TimeSpan.FromSeconds(30));
 
 // Enforce minimum TLS 1.2 and prefer TLS 1.3 for all HTTPS endpoints.
 builder.WebHost.ConfigureKestrel(options =>

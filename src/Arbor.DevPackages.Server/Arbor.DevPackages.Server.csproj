@@ -10,6 +10,8 @@
   <ItemGroup>
     <PackageReference Include="NuGet.Packaging" />
     <PackageReference Include="NuGet.Versioning" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" />
     <ProjectReference Include="..\Arbor.DevPackages.Core\Arbor.DevPackages.Core.csproj" />
     <ProjectReference Include="..\Arbor.DevPackages.ServiceDefaults\Arbor.DevPackages.ServiceDefaults.csproj" />
   </ItemGroup>

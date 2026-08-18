@@ -1,0 +1,30 @@
+# systemd unit for Arbor.DevPackages.Server on Linux.
+#
+# Setup:
+#   1. ./scripts/publish.ps1 -RuntimeIdentifiers linux-x64
+#   2. Extract artifacts/release/Arbor.DevPackages.Server-<version>-linux-x64.zip to
+#      /opt/arbor-devpackages, then: chmod +x /opt/arbor-devpackages/Arbor.DevPackages.Server
+#   3. sudo cp scripts/arbor-devpackages.service /etc/systemd/system/
+#   4. sudo systemctl daemon-reload
+#   5. sudo systemctl enable --now arbor-devpackages
+#
+# Program.cs calls builder.Host.UseSystemd(), so the service picks up sd_notify
+# (start/stop/watchdog) signals automatically when run under systemd with Type=notify.
+
+[Unit]
+Description=Arbor.DevPackages NuGet Server
+After=network.target
+
+[Service]
+Type=notify
+WorkingDirectory=/opt/arbor-devpackages
+ExecStart=/opt/arbor-devpackages/Arbor.DevPackages.Server
+Restart=on-failure
+RestartSec=5
+User=arbor-devpackages
+Environment=DOTNET_ENVIRONMENT=Production
+# Environment=OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+# Environment=PackageStorePath=/var/lib/arbor-devpackages/store
+
+[Install]
+WantedBy=multi-user.target

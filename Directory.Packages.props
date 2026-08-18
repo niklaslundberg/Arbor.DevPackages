@@ -8,7 +8,9 @@
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
 
     <!-- Storage -->
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.7" />
+    <!-- Pinned to 10.0.11 (not floating) to pull in SQLitePCLRaw >= 2.1.12, which fixes
+         GHSA-2m69-gcr7-jv3q (SQLitePCLRaw.lib.e_sqlite3 <= 2.1.11). -->
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.11" />
 
     <!-- Aspire (Aspire.Hosting.AppHost is auto-referenced by Aspire.AppHost.Sdk) -->
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.5.0" />
@@ -18,7 +20,12 @@
     <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.15.3" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.2" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.15.1" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.15.1" />
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.3" />
+
+    <!-- Production hosting (Windows Service / systemd) -->
+    <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.0" />
 
     <!-- Testing -->
     <PackageVersion Include="Arbor.Aesculus.NCrunch" Version="3.9.0" />

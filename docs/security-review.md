@@ -59,11 +59,26 @@ Address any reported vulnerabilities before merging. Do not disable or skip this
 - Set `persist-credentials: false` on all `actions/checkout` steps.
 - Keep job/workflow permissions minimal (use `permissions:` key at workflow or job level).
 - Upload only required artifacts; set `retention-days: 14` on CI artifacts.
-- Provide SHA-256 checksums for release binaries.
+- Provide SHA-256 checksums for release binaries — `scripts/publish.ps1` writes a `.sha256` file
+  alongside every published archive, and `.github/workflows/release.yml` uploads both.
+
+### 7. Production hosting
+
+- Run the Windows Service / systemd service under a dedicated, least-privilege account — never
+  `LocalSystem` or `root` — scoped to the package store and configuration directories it needs.
+- `PublishSingleFile` self-contained artifacts bundle the .NET runtime; keep the deployed host
+  patched at the OS level and re-publish on every .NET servicing release, since there is no
+  separately-updatable shared runtime to patch.
+- Prefer the OTLP exporter (`OTEL_EXPORTER_OTLP_ENDPOINT`) pointed at a collector on a private
+  network segment; never expose the collector endpoint publicly.
 
 ## Initial Dependency Review
 
-No production dependencies have been added yet (pre-implementation phase). This section will be updated with the first dependency audit result after the solution is initialized.
+Production dependencies are tracked in [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md), all
+MIT or Apache 2.0 licensed. `dotnet list package --vulnerable --include-transitive` runs on every
+CI build (see `.github/workflows/ci.yml`); NuGet audit warnings are treated as build errors
+(`TreatWarningsAsErrors`), so a newly-disclosed advisory in any dependency — direct or transitive
+— fails the build until the affected package is bumped or pinned to a patched version.
 
 ## Guidelines for Future PRs
 

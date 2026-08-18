@@ -8,7 +8,7 @@ Arbor.DevPackages uses the following third-party packages. Each package retains 
 
 ### Microsoft.Data.Sqlite
 
-- **Version:** 10.0.7
+- **Version:** 10.0.11
 - **License:** MIT
 - **Project:** https://github.com/dotnet/efcore
 - **Used in:** `Arbor.DevPackages.Storage.Sqlite`
@@ -26,6 +26,20 @@ Arbor.DevPackages uses the following third-party packages. Each package retains 
 - **License:** MIT
 - **Project:** https://github.com/dotnet/aspire
 - **Used in:** `Arbor.DevPackages.ServiceDefaults`
+
+### Microsoft.Extensions.Hosting.WindowsServices
+
+- **Version:** 10.0.0
+- **License:** MIT
+- **Project:** https://github.com/dotnet/runtime
+- **Used in:** `Arbor.DevPackages.Server` (run as a Windows Service via `UseWindowsService`)
+
+### Microsoft.Extensions.Hosting.Systemd
+
+- **Version:** 10.0.0
+- **License:** MIT
+- **Project:** https://github.com/dotnet/runtime
+- **Used in:** `Arbor.DevPackages.Server` (run under systemd via `UseSystemd`)
 
 ### OpenTelemetry.Exporter.OpenTelemetryProtocol
 
@@ -55,20 +69,27 @@ Arbor.DevPackages uses the following third-party packages. Each package retains 
 - **Project:** https://github.com/open-telemetry/opentelemetry-dotnet-contrib
 - **Used in:** `Arbor.DevPackages.ServiceDefaults`
 
+### OpenTelemetry.Instrumentation.Runtime
+
+- **Version:** 1.15.1
+- **License:** Apache 2.0
+- **Project:** https://github.com/open-telemetry/opentelemetry-dotnet-contrib
+- **Used in:** `Arbor.DevPackages.ServiceDefaults` (GC, JIT, thread pool, and exception metrics)
+
 ---
 
 ## Aspire Application Host
 
 ### Aspire.AppHost.Sdk (SDK)
 
-- **Version:** 13.2.4
+- **Version:** 13.4.6
 - **License:** MIT
 - **Project:** https://github.com/dotnet/aspire
 - **Used in:** `Arbor.DevPackages.AppHost` (as MSBuild SDK)
 
 ### Aspire.Hosting.AppHost (auto-referenced by Aspire.AppHost.Sdk)
 
-- **Version:** 13.2.4
+- **Version:** 13.4.6
 - **License:** MIT
 - **Project:** https://github.com/dotnet/aspire
 - **Used in:** `Arbor.DevPackages.AppHost`
