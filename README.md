@@ -86,8 +86,9 @@ HTTPS is an opt-in configuration option. HTTP on port 5000 is the default for lo
 Logging, tracing, and metrics are wired up in `Arbor.DevPackages.ServiceDefaults` for every
 environment (not just under Aspire):
 
-- **Logging**: structured logs flow through the standard `ILogger` pipeline, exported via OTel
-  and always also written to the console.
+- **Logging**: structured logs flow through the standard `ILogger` pipeline and are always
+  written to the console; they are also exported via OTel once an OTLP endpoint is configured
+  (see below).
 - **Tracing**: ASP.NET Core and outgoing `HttpClient` spans.
 - **Metrics**: ASP.NET Core, `HttpClient`, and .NET runtime metrics (GC, JIT, thread pool,
   exceptions) via `OpenTelemetry.Instrumentation.Runtime`.

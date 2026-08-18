@@ -74,7 +74,11 @@ Address any reported vulnerabilities before merging. Do not disable or skip this
 
 ## Initial Dependency Review
 
-No production dependencies have been added yet (pre-implementation phase). This section will be updated with the first dependency audit result after the solution is initialized.
+Production dependencies are tracked in [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md), all
+MIT or Apache 2.0 licensed. `dotnet list package --vulnerable --include-transitive` runs on every
+CI build (see `.github/workflows/ci.yml`); NuGet audit warnings are treated as build errors
+(`TreatWarningsAsErrors`), so a newly-disclosed advisory in any dependency — direct or transitive
+— fails the build until the affected package is bumped or pinned to a patched version.
 
 ## Guidelines for Future PRs
 

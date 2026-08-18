@@ -26,7 +26,11 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 // Both calls are context-aware no-ops unless the process is actually running as a Windows
 // Service or under systemd (detected via WindowsServiceHelpers/SystemdHelpers), so it is safe
 // to call them unconditionally for every hosting environment, including tests.
-builder.Host.UseWindowsService(options => options.ServiceName = "Arbor.DevPackages");
+// The name must match the name the service was registered under (see
+// scripts/install-windows-service.ps1 -ServiceName), since the SCM dispatches control
+// requests by that name; it is configurable here for the same reason.
+var windowsServiceName = builder.Configuration["WindowsService:ServiceName"] ?? "Arbor.DevPackages";
+builder.Host.UseWindowsService(options => options.ServiceName = windowsServiceName);
 builder.Host.UseSystemd();
 
 // Give in-flight requests time to complete before the service/process stops.

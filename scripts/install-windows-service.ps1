@@ -53,9 +53,17 @@ if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
     throw "A service named '$ServiceName' already exists. Run uninstall-windows-service.ps1 first if you want to replace it."
 }
 
+# The app must register itself with the SCM under the exact name it was installed as (the SCM
+# dispatches control requests by that name), so pass it through as a command-line configuration
+# override read by Program.cs (WindowsService:ServiceName) whenever it differs from the default.
+$binaryPathName = "`"$ExecutablePath`""
+if ($ServiceName -ne "Arbor.DevPackages") {
+    $binaryPathName += " --WindowsService:ServiceName `"$ServiceName`""
+}
+
 New-Service `
     -Name $ServiceName `
-    -BinaryPathName "`"$ExecutablePath`"" `
+    -BinaryPathName $binaryPathName `
     -DisplayName $DisplayName `
     -Description "Local NuGet v3 package server (read-through proxy, offline cache)." `
     -StartupType $StartupType
