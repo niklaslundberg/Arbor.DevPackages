@@ -1,4 +1,6 @@
-<Project Sdk="Aspire.AppHost.Sdk/13.2.4">
+<!-- 13.4.6, not floating: pulls StreamJsonRpc >= 2.25.29, which brings MessagePack >= 2.5.302,
+     fixing GHSA-hv8m-jj95-wg3x and related advisories in MessagePack < 2.5.301. -->
+<Project Sdk="Aspire.AppHost.Sdk/13.4.6">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>

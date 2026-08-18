@@ -8,7 +8,7 @@ Arbor.DevPackages uses the following third-party packages. Each package retains 
 
 ### Microsoft.Data.Sqlite
 
-- **Version:** 10.0.7
+- **Version:** 10.0.11
 - **License:** MIT
 - **Project:** https://github.com/dotnet/efcore
 - **Used in:** `Arbor.DevPackages.Storage.Sqlite`
@@ -82,14 +82,14 @@ Arbor.DevPackages uses the following third-party packages. Each package retains 
 
 ### Aspire.AppHost.Sdk (SDK)
 
-- **Version:** 13.2.4
+- **Version:** 13.4.6
 - **License:** MIT
 - **Project:** https://github.com/dotnet/aspire
 - **Used in:** `Arbor.DevPackages.AppHost` (as MSBuild SDK)
 
 ### Aspire.Hosting.AppHost (auto-referenced by Aspire.AppHost.Sdk)
 
-- **Version:** 13.2.4
+- **Version:** 13.4.6
 - **License:** MIT
 - **Project:** https://github.com/dotnet/aspire
 - **Used in:** `Arbor.DevPackages.AppHost`
