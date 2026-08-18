@@ -59,7 +59,18 @@ Address any reported vulnerabilities before merging. Do not disable or skip this
 - Set `persist-credentials: false` on all `actions/checkout` steps.
 - Keep job/workflow permissions minimal (use `permissions:` key at workflow or job level).
 - Upload only required artifacts; set `retention-days: 14` on CI artifacts.
-- Provide SHA-256 checksums for release binaries.
+- Provide SHA-256 checksums for release binaries — `scripts/publish.ps1` writes a `.sha256` file
+  alongside every published archive, and `.github/workflows/release.yml` uploads both.
+
+### 7. Production hosting
+
+- Run the Windows Service / systemd service under a dedicated, least-privilege account — never
+  `LocalSystem` or `root` — scoped to the package store and configuration directories it needs.
+- `PublishSingleFile` self-contained artifacts bundle the .NET runtime; keep the deployed host
+  patched at the OS level and re-publish on every .NET servicing release, since there is no
+  separately-updatable shared runtime to patch.
+- Prefer the OTLP exporter (`OTEL_EXPORTER_OTLP_ENDPOINT`) pointed at a collector on a private
+  network segment; never expose the collector endpoint publicly.
 
 ## Initial Dependency Review
 

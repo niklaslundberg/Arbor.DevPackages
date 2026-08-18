@@ -81,6 +81,57 @@ HTTPS is an opt-in configuration option. HTTP on port 5000 is the default for lo
 
 > **Security note:** The minimum TLS version enforced by the server is TLS 1.2; TLS 1.3 is preferred when both sides support it.
 
+## Observability (OpenTelemetry)
+
+Logging, tracing, and metrics are wired up in `Arbor.DevPackages.ServiceDefaults` for every
+environment (not just under Aspire):
+
+- **Logging**: structured logs flow through the standard `ILogger` pipeline, exported via OTel
+  and always also written to the console.
+- **Tracing**: ASP.NET Core and outgoing `HttpClient` spans.
+- **Metrics**: ASP.NET Core, `HttpClient`, and .NET runtime metrics (GC, JIT, thread pool,
+  exceptions) via `OpenTelemetry.Instrumentation.Runtime`.
+- Every signal carries `service.name` / `service.version` (from the assembly's informational
+  version, which embeds the git commit) / `service.instance.id` and a `deployment.environment`
+  resource attribute.
+
+Export to an OTLP collector (Jaeger, Grafana, Aspire dashboard, etc.) by setting
+`OTEL_EXPORTER_OTLP_ENDPOINT`; without it, only console logging is active — no traces or
+metrics are exported. Point the collector at a private network segment, never a public endpoint.
+
+## Production deployment
+
+### Framework-independent (self-contained) release artifacts
+
+```shell
+pwsh ./scripts/publish.ps1
+```
+
+Publishes single-file, self-contained builds of `Arbor.DevPackages.Server` for `win-x64`,
+`linux-x64`, `linux-arm64`, `osx-x64`, and `osx-arm64` (override with `-RuntimeIdentifiers`) into
+`artifacts/release/`. Each platform gets a zipped archive, a `.sha256` checksum file, and the set
+is summarized in `manifest.json`. "Self-contained" means the target machine does **not** need the
+.NET runtime installed.
+
+### Run as a Windows Service
+
+```powershell
+pwsh ./scripts/publish.ps1 -RuntimeIdentifiers win-x64
+# Extract artifacts/release/Arbor.DevPackages.Server-<version>-win-x64.zip, then, elevated:
+pwsh ./scripts/install-windows-service.ps1 -ExecutablePath C:\Apps\ArborDevPackages\Arbor.DevPackages.Server.exe
+Start-Service -Name Arbor.DevPackages
+```
+
+`Program.cs` calls `UseWindowsService()`, which is a no-op everywhere except when the process is
+actually started by the Windows Service Control Manager — the same published exe runs equally
+well from the console. Use `scripts/uninstall-windows-service.ps1` to remove the service.
+
+### Run under systemd (Linux)
+
+`Program.cs` also calls `UseSystemd()`. Publish for `linux-x64`, extract the archive, and install
+the example unit at [`scripts/arbor-devpackages.service`](scripts/arbor-devpackages.service) — see
+the comments in that file for the full setup.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

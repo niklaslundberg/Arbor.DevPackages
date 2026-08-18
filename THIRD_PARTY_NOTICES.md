@@ -27,6 +27,20 @@ Arbor.DevPackages uses the following third-party packages. Each package retains 
 - **Project:** https://github.com/dotnet/aspire
 - **Used in:** `Arbor.DevPackages.ServiceDefaults`
 
+### Microsoft.Extensions.Hosting.WindowsServices
+
+- **Version:** 10.0.0
+- **License:** MIT
+- **Project:** https://github.com/dotnet/runtime
+- **Used in:** `Arbor.DevPackages.Server` (run as a Windows Service via `UseWindowsService`)
+
+### Microsoft.Extensions.Hosting.Systemd
+
+- **Version:** 10.0.0
+- **License:** MIT
+- **Project:** https://github.com/dotnet/runtime
+- **Used in:** `Arbor.DevPackages.Server` (run under systemd via `UseSystemd`)
+
 ### OpenTelemetry.Exporter.OpenTelemetryProtocol
 
 - **Version:** 1.15.3
@@ -54,6 +68,13 @@ Arbor.DevPackages uses the following third-party packages. Each package retains 
 - **License:** Apache 2.0
 - **Project:** https://github.com/open-telemetry/opentelemetry-dotnet-contrib
 - **Used in:** `Arbor.DevPackages.ServiceDefaults`
+
+### OpenTelemetry.Instrumentation.Runtime
+
+- **Version:** 1.15.1
+- **License:** Apache 2.0
+- **Project:** https://github.com/open-telemetry/opentelemetry-dotnet-contrib
+- **Used in:** `Arbor.DevPackages.ServiceDefaults` (GC, JIT, thread pool, and exception metrics)
 
 ---
 
